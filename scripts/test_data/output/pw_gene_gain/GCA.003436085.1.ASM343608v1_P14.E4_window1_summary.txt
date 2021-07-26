@@ -1,0 +1,2 @@
+iso1	iso2	comp	genenum_iso1	genenum_iso2	dist_bray	subset_genenum_iso1	subset_genenum_iso2	subset_genenum_mrca	subset_dist_bray	subset_n_gene_diff_bray	iso1_gain	iso1_loss	iso2_gain	iso2_loss	total_events	iso1_gain_events	iso1_loss_events	iso2_gain_events	iso2_loss_events
+GCA.003436085.1.ASM343608v1	P14.E4	GCA.003436085.1.ASM343608v1_P14.E4	4291	5122	0.22	4207	5022	4101	0.222	2051	320	214	1219	298	401	68	86	149	98

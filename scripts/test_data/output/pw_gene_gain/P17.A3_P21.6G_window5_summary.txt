@@ -1,0 +1,2 @@
+comp	iso1	iso2	window_size	genenum_iso1	genenum_iso2	n_gene_diff_bray	n_gene_diff_sorenson	dist_bray	dist_sorenson	n_events_bray	n_events_sorenson	mean_size_events_bray	mean_size_events_sorenson
+P17.A3_P21.6G	P17.A3	P21.6G	5	5113	4908	2385	2314	0.23800019958088	0.231804281345566	277	261	8.6101083032491	9.0727969348659

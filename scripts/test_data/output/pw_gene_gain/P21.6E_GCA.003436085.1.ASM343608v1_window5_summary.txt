@@ -1,0 +1,2 @@
+comp	iso1	iso2	window_size	genenum_iso1	genenum_iso2	n_gene_diff_bray	n_gene_diff_sorenson	dist_bray	dist_sorenson	n_events_bray	n_events_sorenson	mean_size_events_bray	mean_size_events_sorenson
+P21.6E_GCA.003436085.1.ASM343608v1	P21.6E	GCA.003436085.1.ASM343608v1	5	4897	4290	1649	1610	0.179492761510831	0.17683465959328	242	225	6.81404958677686	7.25333333333333

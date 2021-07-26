@@ -1,0 +1,747 @@
+---
+title: "Processing pangenome"
+output: html_document
+---
+Edits metadata, filters out low quality genomes, runs prokka on genome assemblies, sets up files to run roary pangenome, makes phylogeny, generates annotations for homologous groups
+
+```{r setup, include=FALSE}
+rm(list=ls())
+knitr::opts_chunk$set(echo = TRUE)
+knitr::opts_knit$set(root.dir ='/stor/work/Ochman/alex/captive_ape_strain_genomes')
+library(ape)
+library(treeio)
+library(ggtree)
+library(estimatr)
+library(tidyverse)
+library(seqinr)
+library(stringr)
+library(cowplot)
+library(harrietr)
+library(vegan)
+```
+
+### Merge NCBI and isolate metadata
+```{r}
+#read in metadata for isolates downloaded from ncbi
+ncbi <- read_tsv('data/ncbi_genomes/ncbi_genome_assembly_quality.txt',col_types = cols())
+ncbi <- ncbi %>% mutate(dataset = 'ncbi_genomes')
+#read in metadata for isolates sequenced by this study
+strain <- read_tsv('metadata/strain_metadata_assembly_quality.txt',col_types = cols())
+strain <- strain %>% mutate(dataset = 'isolate_genomes',
+                            isolation_source = 'stool',
+                            infection_status = FALSE) 
+Bt_species = c('Bacteroides fragilis','Bacteroides ovatus',
+               'Bacteroides thetaiotaomicron','Bacteroides xylanisolvens')
+BfrA_outgroup = c('GCA_016864615.1_ASM1686461v1',
+                  'GCA_001695355.1_ASM169535v1',
+                  'GCA_003471745.1_ASM347174v1')
+#identify MAG genomes that snuck into isolate genomes
+(MAG_samples <- c(as.character(ncbi$isolate[str_detect(ncbi$isolate, '_SRR')]),
+                 as.character(ncbi$isolate[str_detect(ncbi$isolate, '_ERR')])))
+
+metadata <- bind_rows(strain,ncbi) %>% 
+  rename(Genome.size='Genome size',
+         predicted.genes = "# predicted genes") %>%
+  filter(taxonomy_Species%in%Bt_species|isolate%in%BfrA_outgroup) %>%
+  filter(!isolate %in% MAG_samples)
+
+
+ggplot(metadata, aes(x=Completeness,y=Contamination)) + geom_point() + theme_bw()
+#several ncbi genomes have high contamination eliminate outliers
+metadata_edit <- metadata %>% 
+  filter(Contamination<5 & Completeness>95) %>%
+  mutate(taxonomy_Species = str_replace_all(taxonomy_Species,' ','_'),
+         isolate_old = isolate,
+         isolate = str_replace_all(isolate,'[_-]','.'))  %>%
+  unite(host_site, host, site, sep = "_", remove = FALSE) 
+dir.create('results/pangenome')
+write_tsv(metadata_edit, 
+          file= "results/pangenome/Bacteroides_metadata.txt")
+head(metadata_edit)
+```
+
+### Contamination and completeness are not correlated with # of predicted genes
+```{r}
+#subset to Bxy strains
+Bxy_metadata <- metadata_edit %>% filter(taxonomy_Species== 'Bacteroides_xylanisolvens')
+table(Bxy_metadata$host)
+summary(lm_robust(Genome.size ~ Contamination + Completeness + host, data=Bxy_metadata))
+summary(lm_robust(predicted.genes ~ Contamination + Completeness + host, data=Bxy_metadata))
+summary <- metadata %>% group_by(taxonomy_Genus,taxonomy_Species,dataset) %>% 
+  tally() %>% 
+  pivot_wider(names_from = dataset,values_from = n,values_fill = 0)
+
+```
+
+### Table S1 and S2
+```{r}
+metadata = metadata %>% 
+  mutate(included_analysis = ifelse(isolate %in% metadata_edit$isolate_old,1,0)) 
+metadata %>% group_by(included_analysis,taxonomy_Species,dataset) %>% tally()
+TableS1 = metadata %>% filter(dataset == 'isolate_genomes')
+TableS2 = metadata %>% filter(dataset == 'ncbi_genomes')
+```
+
+
+### Run prokka on assemblies 
+(Can't use CheckM prokka output bc CheckM removes full fasta from end of gff file, so roary doesn't take it)
+```{r}
+#output list of files to run prokka on that run_prokka.sh takes as input
+dir.create('results/pangenome/prokka')
+prokka_done = list.files('results/pangenome/prokka')
+print(paste(length(prokka_done),'genomes done with prokka'))
+get_file_path <- function(isolate,dataset) {
+if (dataset=='ncbi_genomes') {
+filePath = paste0('data/ncbi_genomes/isolate_genomes/',isolate,'.fna')
+} else {
+filePath = paste0('results/isolate_genomes/',isolate,'/',isolate,'.fna')
+}
+return(filePath)
+}
+#genomes left to run prof
+setdiff(metadata_edit$isolate_old,as.character(prokka_done))
+metadata_prokka_todo <- metadata_edit %>% 
+  filter(!isolate_old %in% as.character(prokka_done)) 
+if (nrow(metadata_prokka_todo)>0) {
+metadata_prokka_todo <- metadata_prokka_todo  %>%
+mutate(filepath = get_file_path(isolate,dataset)) 
+#print(metadata_prokka_todo$isolate)
+write.table(metadata_prokka_todo$filepath,file='results/pangenome/prokka/todo.txt', #output todo list
+            col.names = F,
+            row.names = F,
+            quote = F)
+}
+```
+
+### Run prokka on commandline
+./scripts/run_prokka.sh
+
+### Copy files for roary runs
+Adds three outgroup assemblies for each Bacteroides species
+```{r}
+#outgroup all isolate genomes plus outgroup to species folders 
+
+#Bacteroides xylanisolvens
+Bov_outgroup = c('GCA_002959635.1_ASM295963v1',
+  'GCA_007012325.1_ASM701232v1',
+  'GCA_015557725.1_ASM1555772v1')
+Bxy_metadata <- metadata_edit %>% 
+  filter(taxonomy_Species == 'Bacteroides_xylanisolvens' | 
+           isolate_old %in% Bov_outgroup) 
+system(paste0('mkdir -pv results/pangenome/Bacteroides_xylanisolvens/faa'))
+for (isolate_old in Bxy_metadata$isolate_old) {
+    infile = paste0('results/pangenome/prokka/',isolate_old,'/',isolate_old,'.faa')
+    isolate = str_replace_all(isolate_old,'[_-]','.')
+    outfile = paste0('results/pangenome/Bacteroides_xylanisolvens/faa/',isolate,'.faa')
+    #system(paste0('cp ',infile,' ',outfile))
+    }  
+system(paste0('mkdir -pv results/pangenome/Bacteroides_xylanisolvens/gff'))
+for (isolate_old in Bxy_metadata$isolate_old) {
+    infile = paste0('results/pangenome/prokka/',isolate_old,'/',isolate_old,'.gff')
+    isolate = str_replace_all(isolate_old,'[_-]','.')
+    outfile = paste0('results/pangenome/Bacteroides_xylanisolvens/gff/',isolate,'.gff')
+    #system(paste0('cp ',infile,' ',outfile))
+    }       
+#sanity check # of genomes in metadata = # of gff and faa files
+write_tsv(Bxy_metadata, file= "results/pangenome/Bacteroides_xylanisolvens/metadata.txt")
+nrow(Bxy_metadata)
+length(list.files('results/pangenome/Bacteroides_xylanisolvens/gff/')) 
+length(list.files('results/pangenome/Bacteroides_xylanisolvens/faa/'))
+
+
+#Bacteroides fragilis
+BfrA_outgroup = c('GCA_016864615.1_ASM1686461v1','GCA_001695355.1_ASM169535v1','GCA_003471745.1_ASM347174v1')
+Bfr_metadata <- metadata_edit %>% 
+  filter(taxonomy_Species == 'Bacteroides_fragilis' | isolate_old %in% BfrA_outgroup)
+system(paste0('mkdir -pv results/pangenome/Bacteroides_fragilis/faa'))
+for (isolate_old in Bfr_metadata$isolate_old) {
+    infile = paste0('results/pangenome/prokka/',isolate_old,'/',isolate_old,'.faa')
+    isolate = str_replace_all(isolate_old,'[_-]','.')
+    outfile = paste0('results/pangenome/Bacteroides_fragilis/faa/',isolate,'.faa')
+    #system(paste0('cp ',infile,' ',outfile))
+    }   
+system(paste0('mkdir -pv results/pangenome/Bacteroides_fragilis/gff'))
+for (isolate_old in Bfr_metadata$isolate_old) {
+    infile = paste0('results/pangenome/prokka/',isolate_old,'/',isolate_old,'.gff')
+    isolate = str_replace_all(isolate_old,'[_-]','.')
+    outfile = paste0('results/pangenome/Bacteroides_fragilis/gff/',isolate,'.gff')
+    #system(paste0('cp ',infile,' ',outfile))
+}
+#sanity check # of genomes in metadata = # of gff and faa files
+write_tsv(Bfr_metadata, 
+          file= "results/pangenome/Bacteroides_fragilis/metadata.txt")
+nrow(Bfr_metadata)
+length(list.files('results/pangenome/Bacteroides_fragilis/gff/'))
+length(list.files('results/pangenome/Bacteroides_fragilis/faa/'))
+
+
+
+#Bacteroides ovatus
+Bxy_outgroup = c('P19-10A','GCA_009102165.1_ASM910216v1','GCA_003436085.1_ASM343608v1')
+Bov_metadata <- metadata_edit %>% 
+  filter(taxonomy_Species == 'Bacteroides_ovatus' | isolate_old %in% Bxy_outgroup)
+system(paste0('mkdir -pv results/pangenome/Bacteroides_ovatus/faa'))
+for (isolate_old in Bov_metadata$isolate_old) {
+    infile = paste0('results/pangenome/prokka/',isolate_old,'/',isolate_old,'.faa')
+    isolate = str_replace_all(isolate_old,'[_-]','.')
+    outfile = paste0('results/pangenome/Bacteroides_ovatus/faa/',isolate,'.faa')
+    #system(paste0('cp ',infile,' ',outfile))
+    }  
+system(paste0('mkdir -pv results/pangenome/Bacteroides_ovatus/gff'))
+for (isolate_old in Bov_metadata$isolate_old) {
+    infile = paste0('results/pangenome/prokka/',isolate_old,'/',isolate_old,'.gff')
+    isolate = str_replace_all(isolate_old,'[_-]','.')
+    outfile = paste0('results/pangenome/Bacteroides_ovatus/gff/',isolate,'.gff')
+    #system(paste0('cp ',infile,' ',outfile))
+} 
+#sanity check # of genomes in metadata = # of gff and faa files
+write_tsv(Bov_metadata, 
+          file= "results/pangenome/Bacteroides_ovatus/metadata.txt")
+nrow(Bov_metadata)
+length(list.files('results/pangenome/Bacteroides_ovatus/gff/'))
+length(list.files('results/pangenome/Bacteroides_ovatus/faa/'))
+
+
+#Bacteroides theta
+Bxy_outgroup = c('P19-10A','GCA_009102165.1_ASM910216v1','GCA_003436085.1_ASM343608v1')
+Bth_metadata <- metadata_edit %>% 
+  filter(taxonomy_Species == 'Bacteroides_thetaiotaomicron' | isolate_old %in% Bxy_outgroup)
+system(paste0('mkdir -pv results/pangenome/Bacteroides_thetaiotaomicron/faa'))
+for (isolate_old in Bth_metadata$isolate_old) {
+    infile = paste0('results/pangenome/prokka/',isolate_old,'/',isolate_old,'.faa')
+    isolate = str_replace_all(isolate_old,'[_-]','.')
+    outfile = paste0('results/pangenome/Bacteroides_thetaiotaomicron/faa/',isolate,'.faa')
+    #system(paste0('cp ',infile,' ',outfile))
+    }  
+system(paste0('mkdir -pv results/pangenome/Bacteroides_thetaiotaomicron/gff'))
+for (isolate_old in Bth_metadata$isolate_old) {
+    infile = paste0('results/pangenome/prokka/',isolate_old,'/',isolate_old,'.gff')
+    isolate = str_replace_all(isolate_old,'[_-]','.')
+    outfile = paste0('results/pangenome/Bacteroides_thetaiotaomicron/gff/',isolate,'.gff')
+    #system(paste0('cp ',infile,' ',outfile))
+    }  
+#sanity check # of genomes in metadata = # of gff and faa files
+write_tsv(Bth_metadata, 
+          file= "results/pangenome/Bacteroides_thetaiotaomicron/metadata.txt")
+nrow(Bth_metadata)
+length(list.files('results/pangenome/Bacteroides_thetaiotaomicron/gff/'))
+length(list.files('results/pangenome/Bacteroides_thetaiotaomicron/faa/'))
+
+```
+
+### run roary on commandline
+run roary no-split-paralogs analysis, raxml phylogeny, eggnog mapper
+
+scripts/pangenome_processing_annotation/run_pangenome.sh 
+
+
+
+### annotations for Bacteroides xylanisolvens orthologous gene groups
+
+####  Dbcan
+```{r}
+dir = 'results/pangenome/Bacteroides_xylanisolvens'
+pan_genome_fasta <- read.fasta(file.path(dir,'roary_nosplitparalogs/pan_genome_reference.fa'),whole.header = T)
+nseqs = length(pan_genome_fasta)
+half= nseqs/2
+part1 = pan_genome_fasta[1:half] 
+part2 = pan_genome_fasta[(half+1):nseqs] 
+system(paste0('mkdir -pv ',file.path(dir,'dbcan')))
+seqinr::write.fasta(part1,names=names(part1),
+                    file=file.path(dir,'dbcan/pan_genome_reference_part1.fa'))
+seqinr::write.fasta(part2,names=names(part2),
+                    file=file.path(dir,'dbcan/pan_genome_reference_part2.fa'))
+```
+
+```{bash}
+#wget http://bcb.unl.edu/dbCAN2/data/blast/20210413144512/overview.txt -O results/pangenome/Bacteroides_xylanisolvens/dbcan/dbDCAN_part1.txt
+#wget http://bcb.unl.edu/dbCAN2/data/blast/20210413153256/overview.txt -O results/pangenome/Bacteroides_xylanisolvens/dbcan/dbDCAN_part2.txt
+```
+
+```{r}
+dbcan_p1 <- read.table(file.path(dir,'dbcan/dbDCAN_part1.txt'),sep='\t',header=T)
+dbcan_p2 <- read.table(file.path(dir,'dbcan/dbDCAN_part2.txt'),sep='\t',header=T)
+
+dbcan <- dbcan_p1 %>% 
+  add_row(dbcan_p2) %>% #add part2 to end of part2
+  separate(col='Gene.ID',into=c('Gene','ID'),sep='_',extra='drop') %>%
+  unite(col='Gene.ID',Gene:ID,sep='_') %>%
+  mutate_all(as.character) 
+dbcan = dbcan %>%
+  separate(HMMER,sep='[(_]',into = c('HMMER'),extra = 'drop') %>%
+  mutate(HMMER = ifelse(HMMER=='N',NA,as.character(HMMER)),
+         DIAMOND = ifelse(DIAMOND=='N',NA,as.character(DIAMOND)),
+         Hotpep = ifelse(Hotpep=='N',NA,as.character(Hotpep)))
+
+
+colnames(dbcan) = c("Gene.ID","dbcan_HMMER","dbcan_Hotpep","dbcan_DIAMOND","dbcan_Signalp","dbcan_X")
+head(dbcan)
+write_tsv(dbcan,file.path(dir,'dbcan/dbDCAN_final.txt'))
+```
+
+#### Kofam Koala
+```{r}
+dir = 'results/pangenome/Bacteroides_xylanisolvens'
+pan_genome_fasta <- read.fasta(file.path(dir,'roary_nosplitparalogs/pan_genome_reference_prot.faa'),whole.header = T)
+nseqs = length(pan_genome_fasta)
+third= nseqs/3
+part1 = pan_genome_fasta[1:third] 
+part2 = pan_genome_fasta[(third+1):(2*third)] 
+part3 = pan_genome_fasta[(2*third+1):nseqs] 
+system(paste0('mkdir -pv ',file.path(dir,'koala')))
+seqinr::write.fasta(part1,names=names(part1),
+                    file=file.path(dir,'koala/pan_genome_reference_part1.fa'))
+seqinr::write.fasta(part2,names=names(part2),
+                    file=file.path(dir,'koala/pan_genome_reference_part2.fa'))
+seqinr::write.fasta(part3,names=names(part3),
+                    file=file.path(dir,'koala/pan_genome_reference_part3.fa'))
+```
+
+```{r}
+koala_p1 <- read_table(file.path(dir,'koala/koala_part1.txt'),skip = 2, col_names = F,col_types = cols())
+koala_p2 <- read_table(file.path(dir,'koala/koala_part2.txt'),skip = 2, col_names = F,col_types = cols())
+koala_p3 <- read_table(file.path(dir,'koala/koala_part3.txt'),skip = 2, col_names = F,col_types = cols())
+
+koala <- koala_p1 %>% 
+  add_row(koala_p2) %>% #add part2 to end of part2
+  add_row(koala_p3) %>% 
+  select(-X1)
+colnames(koala) <- c('Gene.ID', 'koala_KO','koala_threshold','koala_HMM_score','koala_E-value','koala_Definition')
+koala = koala %>%
+  separate(col='Gene.ID',into=c('Gene','ID'),sep='_',extra='drop') %>%
+  unite(col='Gene.ID',Gene:ID,sep='_') %>%
+  mutate_all(as.character) %>%
+  group_by(Gene.ID) %>%
+  slice_min(order_by=koala_HMM_score,n=1) %>%
+  as.data.frame()
+head(koala)
+write_tsv(koala,file.path(dir,'koala/koala_final.txt'))
+```
+
+
+#### Sulfatlas 
+```{bash}
+#wget http://application.sb-roscoff.fr/blast/blast_sulfatlas/data/sequences/sulfatlas_v1.3.faa 
+#mv sulfatlas_v1.3.faa results/pangenome/Bacteroides_xylanisolvens/sulfatlas/sulfatlas_v1.3.faa
+#makeblastdb -in results/pangenome/Bacteroides_xylanisolvens/sulfatlas/sulfatlas_v1.3.faa -dbtype prot
+#mkdir results/pangenome/Bacteroides_xylanisolvens/sulfatlas
+#transeq -sequence results/pangenome/Bacteroides_xylanisolvens/roary_nosplitparalogs/pan_genome_reference.fa -outseq results/pangenome/Bacteroides_xylanisolvens/roary_nosplitparalogs/pan_genome_reference_prot.faa
+#blastp -query results/pangenome/Bacteroides_xylanisolvens/roary_nosplitparalogs/pan_genome_reference_prot.faa -db results/pangenome/Bacteroides_xylanisolvens/sulfatlas/sulfatlas_v1.3.faa -out results/pangenome/Bacteroides_xylanisolvens/sulfatlas/pan_genome_reference.txt -max_target_seqs 10 -outfmt "6 qseqid sseqid salltitles pident evalue" 
+```
+
+```{r}
+sulfatlas <- read_tsv(file = file.path(dir,'sulfatlas/pan_genome_reference.txt'),
+                      comment='#',col_names = FALSE, col_types = cols())
+colnames(sulfatlas) <- c('Gene.ID', 'sseqid','salltitles', 'pident', 'evalue_sulfa')
+sulfatlas <- sulfatlas %>%
+  mutate(Gene.ID=str_sub(Gene.ID, end=-3)) %>% 
+  filter(pident > 85 & evalue_sulfa < 1e-5)
+
+sulfatlas <- sulfatlas %>% 
+  separate(col = 'salltitles',into=c(NA,'id','full_descripton'),extra='drop',sep='[|]') %>%
+  separate(col='id',into=c('lcl','sulfatase_family','sulfatase_subfamily'),sep='_') %>%
+  separate(col='full_descripton',into=c('description','species'),sep='OS=') %>%
+  separate(col='description',into=c('front','description'),sep='BACE |BACOV |BACO1 |_BACSE ')  %>%
+  separate(col='species',into=c('species',NA),sep='OX=') 
+
+sulfatlas <- sulfatlas %>% 
+  select('Gene.ID', 'sseqid','pident', 'evalue_sulfa',
+                  'sulfatase_family','sulfatase_subfamily','description','species') 
+sulfatlas <- sulfatlas %>%  group_by(Gene.ID) %>%
+             top_n(n = 1, wt = pident) %>%
+             group_by(Gene.ID) %>%
+             top_n(n = 1, wt = sseqid) %>%
+             as.data.frame()
+colnames(sulfatlas) = c("Gene.ID","sulfatlas_sseqid","sulfatlas_pident","sulfatlas_evalue","sulfatlas_family",
+                        "sulfatlas_subfamily","sulfatlas_description","sulfatlas_species")
+head(sulfatlas)
+write_tsv(sulfatlas,file=file.path(dir,'sulfatlas/pan_genome_reference_sulfatlas_annotation.txt'))
+
+```
+
+#### Eggnog annotation
+```{r}
+eggnog <- readr::read_tsv(
+  file.path(dir,'eggnog_mapper/pan_genome_reference.emapper.annotations'),
+  comment = '##',
+  col_types = cols())
+eggnog <- eggnog %>% 
+   rename('Gene.ID'='#query') %>% 
+   select(Gene.ID,evalue,best_OG_cat,best_OG_name,best_OG_desc)
+colnames(eggnog) = c("Gene.ID","eggnog_evalue","eggnog_best_OG_cat","eggnog_best_OG_name","eggnog_best_OG_desc")
+head(eggnog)
+write_tsv(eggnog,
+  file=file.path(dir,'eggnog_mapper/eggnog_annotation.txt'))
+```
+
+
+#### Set outfolder 
+```{r}
+dir='results/pangenome/Bacteroides_xylanisolvens'
+outdir=file.path('results/analyses_input_files')
+dir.create(outdir)
+```
+
+#### Merge annotations from roary,eggnog,dbcan,sulfatlas,koala
+```{r}
+pres_abs <- read.csv(file.path(dir,'roary_nosplitparalogs/gene_presence_absence.csv'))
+write_tsv(pres_abs,file= file.path(outdir,'roary_nosplitparalogs_gene_presence_absence.txt'))
+Bxy_metadata <- read_tsv(file.path(dir,'metadata.txt'),col_types=cols())
+colnames(pres_abs) <- str_replace_all(colnames(pres_abs),'[_-]','.')
+setdiff(Bxy_metadata$isolate,colnames(pres_abs))
+isblank <- function(x) {as.numeric(str_count(x, pattern = "_"))}
+gene_table <- pres_abs %>% 
+   select(Gene,Bxy_metadata$isolate)  %>%
+   mutate_at(vars(-Gene),isblank) %>%
+   filter(rowSums(across(where(is.numeric)))>0)
+write_tsv(gene_table, file= file.path(outdir,'Bxy_roary_nosplitparalogs_gene_table.txt'))
+
+
+annotation <- pres_abs %>% select(Gene,Annotation,No..isolates,No..sequences) 
+pan_genome_fasta <- read.fasta(
+  file.path(dir,'roary_nosplitparalogs/pan_genome_reference.fa'), 
+  whole.header = T)
+full_sequence_names <- names(pan_genome_fasta) #link between Gene and Gene.ID
+full_sequence_names <- as.data.frame(full_sequence_names) %>%
+  separate(full_sequence_names,sep=' ',into=c('Gene.ID','Gene'))
+annotation <- annotation %>%
+   left_join(full_sequence_names,by='Gene')
+
+eggnog = read_tsv(file.path(dir,'eggnog_mapper/eggnog_annotation.txt'),col_types=cols())
+dbcan = read_tsv(file.path(dir,'dbcan/dbDCAN_final.txt'),col_types=cols())
+koala = read_tsv(file=file.path(dir,'koala/koala_final.txt'),col_types=cols())
+sulfatlas = read_tsv(file=file.path(dir,'sulfatlas/pan_genome_reference_sulfatlas_annotation.txt'),col_types=cols())
+
+annotation <- annotation %>%
+  left_join(koala,by='Gene.ID') %>%
+   left_join(eggnog, by = 'Gene.ID') %>%
+   left_join(dbcan,by='Gene.ID') %>%
+   left_join(sulfatlas,by='Gene.ID') 
+colnames(annotation)
+```
+#### Merge OGG into larger functional categories first by EggCOG,koala,GH
+```{r}
+COG_group <- annotation %>%  
+  group_by(eggnog_best_OG_name,koala_KO,dbcan_HMMER,Annotation) %>%
+  tally() %>%
+  add_count(eggnog_best_OG_name,name = "eggnog_count")
+
+annotation <- annotation %>%  
+  mutate(func_group = paste(eggnog_best_OG_name,koala_KO,dbcan_HMMER,sep='_')) %>%
+  group_by(func_group) %>%
+  mutate(func_annot = paste0(unique(Annotation), collapse = ","))
+write_tsv(annotation, file= file.path(outdir,'Bxy_roary_nosplitparalogs_annotation.txt'))
+```
+
+#### Aggregate faas files into a single faa file
+```{bash echo=F,message=FALSE,results='hide'}
+ls results/pangenome/Bacteroides_xylanisolvens/faa/
+cat results/pangenome/Bacteroides_xylanisolvens/faa/* > results/analyses_input_files/all_prot.faa
+```
+
+### Edit Bxy metadata, reroot Bxy strain phylogeny
+Label major clades and strain lineages isolated from captive apes in metadata 
+```{r}
+#read-in metadata
+Bxy_metadata_file = file.path(dir,"metadata.txt")
+Bxy_metadata = read_tsv(Bxy_metadata_file,col_types = cols())
+Bxy_metadata <- Bxy_metadata %>%
+  mutate(taxonomy_Species = str_replace_all(taxonomy_Species,' ','_'),
+         isolate = str_replace_all(isolate,'[_-]','.'),
+         site = recode(site,'USA: Cambridge'='USA_Europe','USA:Boston'='USA_Europe',
+                       'China: Shenzhen'='China','USA:Seattle'='USA_Europe',     
+                       'USA:Baltimore'='USA_Europe', 'not applicable'='siteUnknown',
+                       'not determined'='siteUnknown','Norway:Oslo'='USA_Europe',
+                       'missing'='siteUnknown')) %>%
+  unite(host_site, host, site, sep = "_", remove = FALSE) 
+
+
+##### Move this section
+table(Bxy_metadata$host_site)
+#look up and recode metadata missing from select samples
+Bxy_metadata$isolate[Bxy_metadata$host_site=='missing_siteUnknown']
+
+Bxy_metadata$host_site[Bxy_metadata$isolate %in% 
+                         c("GCA.900114865.1.IMG.taxon.2654588180.annotated.assembly",
+                           "GCA.900107825.1.IMG.taxon.2623620516.annotated.assembly")
+                         ] <- 'rumen_USA'
+Bxy_metadata$host[Bxy_metadata$isolate %in% 
+                         c("GCA.900114865.1.IMG.taxon.2654588180.annotated.assembly",
+                           "GCA.900107825.1.IMG.taxon.2623620516.annotated.assembly")
+                         ] <- 'rumen'
+
+#Bxy_metadata$isolate[Bxy_metadata$host=='chicken']
+Bxy_metadata$host_site[Bxy_metadata$isolate %in%
+                         c("GCA.002161135.1.ASM216113v1","GCA.002161115.1.ASM216111v1")
+                         ] <- 'chicken_Europe'
+
+
+Bxy_metadata$isolate[Bxy_metadata$host_site=='human_siteUnknown']
+Bxy_metadata$host_site[Bxy_metadata$isolate %in% 
+                         c("GCA.002959635.1.ASM295963v1",
+                           "GCA.000273315.1.Bact.xyla.CL03T12C04.V1",
+                           "GCA.000178215.1.ASM17821v1",
+                           "GCA.000210075.1.ASM21007v1",
+                           "GCA.000178295.1.ASM17829v1",
+                           "GCA.902374095.1.MGYG.HGUT.01345")] <- 'human_USA_Europe'
+Bxy_metadata$host[Bxy_metadata$isolate %in% 
+                         c("GCA.002959635.1.ASM295963v1",
+                           "GCA.000273315.1.Bact.xyla.CL03T12C04.V1",
+                           "GCA.000178215.1.ASM17821v1",
+                           "GCA.000210075.1.ASM21007v1",
+                           "GCA.000178295.1.ASM17829v1",
+                           "GCA.902374095.1.MGYG.HGUT.01345")] <- 'human'
+
+Bxy_metadata <- Bxy_metadata %>%
+  mutate(host_site = recode(host_site,'human_Norway'='human_USA_Europe',
+                            'human_USA'='human_USA_Europe'))
+table(Bxy_metadata$host_site)
+######
+
+
+#root tree
+outgroup_names <- Bxy_metadata %>% 
+  filter(taxonomy_Species!='Bacteroides_xylanisolvens') %>% 
+  pull(isolate)
+Bxy_tree_file = file.path(dir,"phylogeny/RAxML_bipartitions.Bacteroides_xylanisolvens")
+Bxy_tree <- ape::read.tree(Bxy_tree_file)
+Bxy_tree$tip.label = str_replace_all(Bxy_tree$tip.label,'[_-]','.') #clean up names
+Bxy_tree <- root(Bxy_tree,outgroup=outgroup_names) 
+write.tree(Bxy_tree,file = file.path(outdir,'Bacteroides_xylanisolvens.tre'))
+tree_plot <- ggtree(Bxy_tree) %<+% Bxy_metadata +
+   geom_nodepoint(aes(subset = suppressWarnings(as.numeric(label)) > 75),size=.75) +
+   geom_tippoint(aes(color=host_site), alpha=0.8)  + 
+   geom_tiplab() + 
+   xlim(NA,.5)
+
+Bxy_tree <- drop.tip(Bxy_tree,outgroup_names)
+#setdiff(Bxy_tree$tip.label,Bxy_metadata$isolate)
+#setdiff(Bxy_metadata$isolate,Bxy_tree$tip.label)
+
+get_color_palette <- function(tips) {
+  Bxy_metadata <- Bxy_metadata %>% filter(isolate %in% tips)
+  vec <- sort(unique(Bxy_metadata$host_site))
+  return(recode(vec,
+                          'human_USA_Europe'='cadetblue4',
+                          'human_China' = 'deepskyblue',
+                          'rumen_USA' = 'brown4',
+                          'bonobo_Columbus_Zoo'='red2',
+                          'chimpanzee_Houston_Zoo'='orange2',
+                          'orangutan_Houston_Zoo'='purple4',
+                          'gorilla_Columbus_Zoo'='green3',
+                          'chicken_Europe'='tan',
+                          'missing_siteUnknown'='brown4'))}
+host_site_color <- get_color_palette(Bxy_tree$tip.label)
+(Bxy_tree_plot <- ggtree(Bxy_tree) %<+% Bxy_metadata +
+  geom_nodepoint(aes(subset = suppressWarnings(as.numeric(label)) > 90),size=.75) +
+  geom_tippoint(aes(color=host_site), alpha=0.8)  + 
+  scale_colour_manual(values=get_color_palette(Bxy_tree$tip.label)) + 
+  geom_tiplab() + 
+  xlim(NA,.5) +
+  geom_treescale(x=.15,y=.25))
+
+cladeA_MCRA <- ape::getMRCA(Bxy_tree,
+                            c('P17.D4','GCA.003474245.1.ASM347424v1'))
+cladeA_tree <- extract.clade(Bxy_tree,cladeA_MCRA)
+cladeA_tree_plot <- ggtree(cladeA_tree) %<+% Bxy_metadata +
+  geom_nodepoint(aes(subset = suppressWarnings(as.numeric(label)) > 50),size=.75) +
+  geom_tippoint(aes(color=host_site), alpha=0.8)  +
+  scale_colour_manual(values=get_color_palette(cladeA_tree$tip.label)) + 
+  geom_tiplab() +
+  xlim(NA,.5)
+
+cladeB_MCRA <- ape::getMRCA(Bxy_tree,
+                            c('P21.4E','GCA.009102685.1.ASM910268v1'))
+cladeB_tree <- extract.clade(Bxy_tree,cladeB_MCRA)
+cladeB_tree_plot <- ggtree(cladeB_tree) %<+% Bxy_metadata +
+  geom_nodepoint(aes(subset = suppressWarnings(as.numeric(label)) > 50),size=.75) +
+  geom_tippoint(aes(color=host_site), alpha=0.8)  +
+  scale_colour_manual(values=get_color_palette(cladeB_tree$tip.label)) + 
+  geom_tiplab() +
+  xlim(NA,.5)
+
+cladeC_MCRA <- ape::getMRCA(Bxy_tree,
+                            c('GCA.009102525.1.ASM910252v1','GCA.902374095.1.MGYG.HGUT.01345'))
+cladeC_tree <- extract.clade(Bxy_tree,cladeC_MCRA)
+cladeC_tree_plot <- ggtree(cladeC_tree) %<+% Bxy_metadata +
+  geom_nodepoint(aes(subset = suppressWarnings(as.numeric(label)) > 50),size=.75) +
+  geom_tippoint(aes(color=host_site), alpha=0.8)  +
+  scale_colour_manual(values=get_color_palette(cladeC_tree$tip.label)) + 
+  geom_tiplab() +
+  xlim(NA,.5)
+
+Bxy_metadata <- Bxy_metadata %>% mutate(clade = ifelse(
+  isolate %in% cladeA_tree$tip.label,'cladeA',
+    ifelse(isolate %in% cladeB_tree$tip.label,'cladeB',
+      ifelse(isolate %in% cladeC_tree$tip.label,'cladeC','unassigned'))))
+
+mixedhostNode  <- ape::getMRCA(Bxy_tree,c('P14.E4','P15.E10'))
+mixedhostHuman <- c("GCA.003468875.1.ASM346887v1")
+mixedhosttree <- extract.clade(Bxy_tree,mixedhostNode)
+gorilla1Node  <- ape::getMRCA(Bxy_tree,c('P21.6D','P21.2G'))
+gorilla1tree <- extract.clade(Bxy_tree,gorilla1Node)
+gorilla1Human <- c("GCA.003458755.1.ASM345875v1")
+gorilla2Node  <- ape::getMRCA(Bxy_tree,c('P21.4G','P21.11A'))
+gorilla2tree <- extract.clade(Bxy_tree,gorilla2Node)
+gorilla2Human <- c("GCA.003458755.1.ASM345875v1")
+Bxy_metadata <- Bxy_metadata %>% mutate(captive_clade = ifelse(
+  isolate %in% mixedhosttree$tip.label,'mixedhost',
+    ifelse(isolate %in% gorilla1tree$tip.label,'gorilla1',
+      ifelse(isolate %in% gorilla2tree$tip.label,'gorilla2','unassigned'))))
+Bxy_metadata <- Bxy_metadata %>% 
+  mutate(human_ape = 
+  if_else(host %in% c('chimpanzee','bonobo','gorilla','orangutan'),
+                                                  'ape',host))
+#write out metadata
+write_tsv(Bxy_metadata,file=file.path(outdir,'Bxy_metadata.txt'))
+write_tsv(Bxy_metadata,file=file.path(dir,'metadata.txt'))
+
+(Bxy_tree_plot_cladelabels <- ggtree(Bxy_tree) %<+% 
+  Bxy_metadata +
+  geom_nodepoint(aes(subset = suppressWarnings(as.numeric(label)) > 50),size=.75) +
+  geom_tippoint(aes(color=host_site), alpha=0.8)  + 
+  scale_colour_manual(values=get_color_palette(Bxy_tree$tip.label)) + 
+  xlim(NA,.5)+ 
+  geom_cladelabel(node=mixedhostNode, color='black', offset=.01,
+                  label="Mixed-host clade") + 
+  geom_cladelabel(node=gorilla1Node, color='black', offset=.01,label="Gorilla clade1") +
+  geom_cladelabel(node=gorilla2Node, color='black', offset=.01,label="Gorilla clade2") +
+  geom_cladelabel(node=cladeA_MCRA, color='black', offset=.14,label="CladeA") + 
+  geom_cladelabel(node=cladeB_MCRA, color='black', offset=.13,label="CladeB") +
+  geom_cladelabel(node=cladeC_MCRA, color='black', offset=.02,label="CladeC") +
+  xlim(NA,.5) +
+  geom_treescale(x=.05,y=.05))
+```
+
+
+```{r}
+reroot_phylogeny = function(species) {
+  
+  #read-in metadata
+  dir = file.path('results/pangenome',species)
+  metadata_file = file.path(dir,"metadata.txt")
+  metadata = read_tsv(metadata_file,col_types = cols())
+
+  #root tree
+  outgroup_names <- metadata %>% 
+    filter(taxonomy_Species!=species) %>% 
+    pull(isolate)
+  tree_file = file.path(dir,paste0("phylogeny/RAxML_bipartitions.",species))
+  tree <- ape::read.tree(tree_file)
+  tree$tip.label = str_replace_all(tree$tip.label,'[_-]','.') #clean up names
+  tree <- root(tree,outgroup=outgroup_names) 
+  write.tree(tree,file = file.path(dir,paste0(species,'.tre')))
+  
+  #visualize tree
+  tree_plot <- ggtree(tree) %<+% metadata +
+    geom_nodepoint(aes(subset = suppressWarnings(as.numeric(label)) > 75),size=.75) +
+    geom_tippoint(aes(color=host), alpha=0.8)  + 
+    geom_tiplab() 
+  print(tree_plot)
+}
+
+reroot_phylogeny('Bacteroides_xylanisolvens')
+reroot_phylogeny('Bacteroides_fragilis')
+reroot_phylogeny('Bacteroides_ovatus')
+reroot_phylogeny('Bacteroides_thetaiotaomicron')
+```
+
+
+```{r}
+runCount <- function(species,gain_penalty) {
+  #p
+  
+  dir = file.path('results/pangenome',species)
+  tree_file = file.path(dir,paste0(species,'.tre'))
+  pres_abs_file = file.path(dir,"roary_nosplitparalogs/gene_presence_absence.csv")
+  count_outdir = file.path('results/pangenome',species,'count')
+  dir.create(count_outdir)
+  
+  #add nodelabel to tree and output to count folder
+  tree <- read.tree(tree_file)
+  tree <- makeNodeLabel(tree)
+  count_tree_file = file.path(count_outdir,paste0('count_',species,'.tre'))
+  write.tree(tree,file=count_tree_file)
+  
+  #format pres abs table for count
+  pres_abs <- read_csv(pres_abs_file, col_types = cols())
+  colnames(pres_abs) <- stringr::str_replace_all(colnames(pres_abs),'[_-]','.')
+  isblank <-  function(x) {
+    gene_count = as.numeric(str_count(x, pattern = "_"))
+    gene_count = if_else(is.na(gene_count),0,gene_count)
+    }
+  pres_abs <- pres_abs %>% 
+    select(Gene,all_of(tree$tip.label))  %>% 
+    mutate_at(vars(-Gene),isblank)
+  count_pres_abs_file = file.path(count_outdir,'count_pres_abs.txt')
+  write_tsv(pres_abs,file=count_pres_abs_file)
+  
+  #run count
+  count_outfile = file.path(count_outdir,paste0('countOutput_',species,'_gainpenalty',gain_penalty))
+  print(count_outfile)
+  system(paste('java -Xmx2048M -cp bin/Count/Count.jar ca.umontreal.iro.evolution.genecontent.AsymmetricWagner -gain ',
+             gain_penalty,
+             count_tree_file,
+             count_pres_abs_file, '>',
+             count_outfile,sep=' '))
+  system(paste0("grep '# CHANGE' ",count_outfile," | sed 's/# //' > ",count_outfile,".CHANGE"))
+  system(paste0("grep '# PRESENT' ",count_outfile," | sed 's/# //' > ",count_outfile,".PRESENT"))
+  system(paste0("grep '# FAMILY' ",count_outfile," | sed 's/# //' > ",count_outfile,".FAMILY"))
+  
+  family <- read_tsv(paste0(count_outfile,".FAMILY"),col_types = cols()) %>% 
+    dplyr::rename('Gene'='name') %>%
+    select(-FAMILY)
+  write_tsv(family,paste0(count_outfile,".FAMILY"))
+  
+}
+for (gain_penalty in c(1,1.5,2,2.5,3)) {
+ runCount('Bacteroides_xylanisolvens', gain_penalty)
+ runCount('Bacteroides_ovatus', gain_penalty)
+ runCount('Bacteroides_fragilis', gain_penalty)
+ runCount('Bacteroides_thetaiotaomicron', gain_penalty)
+}
+
+
+runKruskal <- function(species,gain_penalty) {
+  count_outdir = file.path('results/pangenome',species,'count')
+  count_outfile = file.path(count_outdir,paste0('countOutput_',species,'_gainpenalty',gain_penalty))
+  present <- read.table(paste0(count_outfile,".PRESENT"),sep='\t',header=TRUE)
+  res <- present %>% 
+    mutate(istip = if_else(str_detect(node,'Node'),'node','tip')) %>% 
+    rstatix::kruskal_test(genes ~ istip) 
+  res$gp <- gain_penalty
+  print(res)
+}
+
+Bxy = rbind(
+  runKruskal('Bacteroides_xylanisolvens',1),
+  runKruskal('Bacteroides_xylanisolvens',1.5),
+  runKruskal('Bacteroides_xylanisolvens',2),
+  runKruskal('Bacteroides_xylanisolvens',2.5),
+  runKruskal('Bacteroides_xylanisolvens',3))
+
+Bov = rbind(
+  runKruskal('Bacteroides_ovatus',1),
+  runKruskal('Bacteroides_ovatus',1.5),
+  runKruskal('Bacteroides_ovatus',2),
+  runKruskal('Bacteroides_ovatus',2.5),
+  runKruskal('Bacteroides_ovatus',3))
+
+Bfr = rbind(
+  runKruskal('Bacteroides_fragilis',1),
+  runKruskal('Bacteroides_fragilis',1.5),
+  runKruskal('Bacteroides_fragilis',2),
+  runKruskal('Bacteroides_fragilis',2.5),
+  runKruskal('Bacteroides_fragilis',3))
+
+Bth = rbind(
+  runKruskal('Bacteroides_thetaiotaomicron',1),
+  runKruskal('Bacteroides_thetaiotaomicron',1.5),
+  runKruskal('Bacteroides_thetaiotaomicron',2),
+  runKruskal('Bacteroides_thetaiotaomicron',2.5),
+  runKruskal('Bacteroides_thetaiotaomicron',3))
+
+
+
+```
+

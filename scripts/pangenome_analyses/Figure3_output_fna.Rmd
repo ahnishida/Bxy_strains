@@ -1,0 +1,169 @@
+---
+title: "Figure3_output_fna"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+rm(list=ls())
+knitr::opts_chunk$set(echo = TRUE, message=FALSE, warning=FALSE)
+knitr::opts_knit$set(root.dir ='/stor/work/Ochman/alex/captive_ape_strain_genomes')
+library(ape)
+library(treeio)
+library(ggtree)
+library(estimatr)
+library(tidyverse)
+library(seqinr)
+library(stringr)
+library(cowplot)
+library(harrietr)
+library(vegan)
+library(ggnewscale)
+library(RColorBrewer)
+library(Biostrings)
+```
+
+### Input files
+```{r}
+#inputs annotation, gene table, Bxy metdata,all_prot
+Bxydir = 'results/pangenome/Bacteroides_xylanisolvens'
+indir = file.path('results/analyses_input_files')
+list.files(indir)
+Bxy_metadata = read_tsv(file=file.path(indir,'Bxy_metadata.txt'),
+                      col_types = cols())
+Bxy_tree = read.tree(file = file.path(indir,'Bacteroides_xylanisolvens.tre'))
+pres_abs =  read_tsv(file= file.path(indir,'roary_nosplitparalogs_gene_presence_absence.txt'),
+                      col_types = cols())
+captive_convergent_genes = readRDS(file=file.path(indir,'captive_convergent_genes.RDS'))
+```
+
+
+```{r pressure, echo=FALSE}
+source('scripts/genomic_island_function.R')
+#calls get_genomic_island function from genomic_island_function.R
+
+#captive_convergent_genes
+window_size=5
+dir.create(file.path(Bxydir,"captive_convergent_genes/gff_window5"),recursive = T)
+get_captive_convergent_genes = function(isolate){
+    #clusters genes within an isolate into genomic islands based on a given window size
+    isolate_old = Bxy_metadata$isolate_old[Bxy_metadata$isolate==isolate]
+    gff_file = paste0('results/pangenome/prokka/',isolate_old,'/',isolate_old,'.gff')
+    genomic_islands_outfile = file.path(Bxydir,'captive_convergent_genes',paste0('gff_window',window_size),
+                    paste0(isolate,'_window',window_size,'_island_gff.txt'))
+                    gff_islands = get_genomic_island(pres_abs=pres_abs,
+                               list_of_genes=captive_convergent_genes,
+                               isolate=isolate,
+                               gff_file=gff_file,
+                               window_size = window_size,
+                               outfile=genomic_islands_outfile)
+}
+
+#test data
+get_captive_convergent_genes('P17.C2')
+captive_isolates = Bxy_metadata$isolate[Bxy_metadata$human_ape=='ape']
+#lapply(captive_isolates,get_captive_convergent_genes)
+
+
+#generate heatmap only with clusters longer than 5 genes
+captive_convergent_table = data.frame(Gene=captive_convergent_genes)
+for  (isolate in captive_isolates) {
+  #read in output
+  genomic_islands_outfile = file.path(Bxydir,'captive_convergent_genes',paste0('gff_window',window_size),
+                    paste0(isolate,'_window',window_size,'_island_gff.txt'))
+  iso = read_tsv(file=genomic_islands_outfile)
+  iso = iso %>% filter(size>5) %>%
+    select(Gene,gene_span) %>% 
+    mutate(Gene=make.names(Gene, unique=TRUE)) 
+  colnames(iso) = c('Gene',isolate)
+  captive_convergent_table = captive_convergent_table %>% full_join(iso,by='Gene')}
+write_tsv(captive_convergent_table,file.path(indir,'convergent_gene_table.txt'))
+
+#arrange for heatmap
+captive_convergent_tableM = captive_convergent_table %>% 
+  column_to_rownames(var='Gene') %>%
+  arrange_all() %>% 
+  t()
+#remove not captive ape strains
+not_captive = Bxy_tree$tip.label[!Bxy_tree$tip.label %in% captive_isolates] 
+Bxy_tree_captive = drop.tip(Bxy_tree,not_captive)
+
+(captive_convergent_heatmap <- gheatmap(
+                              ggtree(Bxy_tree_captive) + geom_tiplab() + ylim(-10,NA),
+                              captive_convergent_tableM,
+                              colnames_angle=90,
+                              hjust=1,
+                              offset = .01) +
+    scale_fill_manual(values=colorRampPalette(brewer.pal(15, "Paired"))(15)))
+
+#subset to PUL region
+table(captive_convergent_table$P21.4G)
+captive_PUL_table = captive_convergent_table %>% 
+  filter(P21.4G == 'group_16989_group_20301' | P21.4G == 'group_20302_group_20338') %>%
+  separate(col = 'Gene',into=c('Gene'),extra='drop',sep='.1') 
+(unique_spans = unique(unlist(select(captive_PUL_table,-Gene))))
+captive_PUL_table = captive_convergent_table %>% 
+  filter_at(vars(-Gene), all_vars(. %in% unique_spans)) 
+captive_PUL_table = captive_PUL_table %>%  
+  filter(rowSums(is.na(captive_PUL_table)) != ncol(captive_PUL_table)-1)
+#number of HGGs in PUL
+captive_PUL_table %>%
+  separate(col = 'Gene',into=c('Gene'),extra='drop',sep='.1') %>%
+  pull(Gene) %>% unique() %>% length()
+write_tsv(captive_PUL_table,file.path(indir,'captive_PUL_table.txt'))
+
+#plot heatmap of subset
+captive_PUL_tableM = captive_PUL_table %>% 
+  as.data.frame() %>%
+  column_to_rownames(var='Gene') %>%
+  arrange_all() %>% 
+  t()
+
+(captive_convergent_heatmap <- gheatmap(
+                              ggtree(Bxy_tree_captive) + geom_tiplab() + ylim(-10,NA),
+                              captive_PUL_tableM,
+                              colnames_angle=90,
+                              hjust=1,
+                              offset = .01) +
+    scale_fill_manual(values=colorRampPalette(brewer.pal(15, "Paired"))(15)))
+
+
+#prep list of isolates and gene spans to extract
+captive_PUL_table_df = captive_PUL_table %>% 
+  pivot_longer(cols=all_of(captive_isolates),names_to='isolate',values_to='gene_span') %>%
+  filter(Gene %in% captive_PUL_table$Gene) %>%
+  select(gene_span,isolate) %>% 
+  distinct() %>%
+  filter(!is.na(gene_span))
+
+get_island_fna = function(isolate,gene_span){
+    updown_size = 100
+    #given isolate and name of genomic island outputs to fna plus X genes upstream and downstream
+    isolate_old = Bxy_metadata$isolate_old[Bxy_metadata$isolate==isolate]
+    gff_file = paste0('results/pangenome/prokka/',isolate_old,'/',isolate_old,'.gff')
+    fna_file = paste0('results/pangenome/prokka/',isolate_old,'/',isolate_old,'.fna')
+    genomic_islands_outfile = 
+      file.path(Bxydir,'captive_convergent_genes',paste0('gff_window',window_size),
+                    paste0(isolate,'_window',window_size,'_island_gff.txt'))
+    island_fasta_outfile = 
+      file.path(Bxydir,'captive_convergent_genes',paste0('fna_window',window_size,'updown',updown_size),gene_span,
+                                 paste0(isolate,'_',gene_span,'_updown_',updown_size,'.fna'))
+    print(island_fasta_outfile)
+    output_island_fasta(
+          isolate=isolate,
+          gene_span = gene_span,
+          genomic_islands_outfile = genomic_islands_outfile,
+          island_fasta_outfile  = island_fasta_outfile,
+          updown_size = updown_size ,
+          fna_file = fna_file,
+          gff_file = gff_file
+          )
+}
+
+#output fnas for test isolate
+captive_PUL_table_df[1,]
+get_island_fna(isolate='P17.C2',gene_span='glaB_2_group_20520')
+#output fnas for all isolates
+#mcmapply(get_island_fna,captive_PUL_table_df$isolate,captive_PUL_table_df$gene_span,mc.cores=8)
+```
+
+Note that the `echo = FALSE` parameter was added to the code chunk to prevent printing of the R code that generated the plot.
