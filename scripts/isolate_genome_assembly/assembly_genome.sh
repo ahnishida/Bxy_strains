@@ -1,10 +1,10 @@
 #!/bin/bash
 
-# script visualize read quality with fastqc 
+# script visualize read quality with fastqc
 # quality filters reads using trimmmomatic
 # assembly using spades isolate mode
 # assess assembly quality with quast
-# assess taxonomy of contigs with centrifuge 
+# assess taxonomy of contigs with centrifuge
 #(quast requires separate conda env to run py3.6)
 
 isolate=$1
@@ -43,7 +43,7 @@ spades.py -1 results/processing/trimmomatic/${isolate}/${isolate}_R1_paired.fast
 cor_err_forward_fastq=results/processing/assemblies/${isolate}/spades_error_corrected_reads/corrected/${isolate}_R1_paired.fastq.00.0_0.cor.fastq.gz
 cor_err_reverse_fastq=results/processing/assemblies/${isolate}/spades_error_corrected_reads/corrected/${isolate}_R2_paired.fastq.00.0_0.cor.fastq.gz
 
-spades isolate mode
+#spades isolate mode
 spades.py -1 $cor_err_forward_fastq -2 $cor_err_reverse_fastq \
           -o results/processing/assemblies/${isolate}/spades_isolate_assembly -t 8 --only-assembler --isolate
 
@@ -51,11 +51,9 @@ source activate quast-env
 #quast and centrifuge require separate env to run py3.6 spades requires>py3.7
 quast.py results/processing/assemblies/${isolate}/spades_isolate_assembly/scaffolds.fasta -o results/processing/assemblies/${isolate}/spades_isolate_assembly/quast/
 
-centrifuge -f -x centrifuge_taxonomy/p_compressed+h+v \
+centrifuge -f -x bin/centrifuge_taxonomy/p_compressed+h+v \
 results/processing/assemblies/${isolate}/spades_isolate_assembly/contigs.fasta \
 -S results/processing/assemblies/${isolate}/spades_isolate_assembly/centrifuge_hits.tsv
-source deactivate
+conda deactivate
 
 rm -r results/processing/tmp_L1_L2_fastq
-
-
