@@ -1,22 +1,19 @@
 #!/bin/python
 
-#determine which ncbi genomes are from isolate, not MAGs, 
+#determine which ncbi genomes are from isolate, not MAGs,
 #outputs these isolate genomes to separate folder
-#formats simplified metadata 
- 
+#formats simplified metadata
+
 import pandas as pd
 import re
 import os
 
 os.chdir('data/ncbi_genomes')
-prok_dn = pd.read_csv('prokaryotes_downloaded.txt',sep='\t')
-print(len(prok_dn))
-prok_failed = pd.read_csv('prokaryotes_downloaded_metadata_failed.txt',sep='\t')	
-print('failed to retrieve metadata for',len(prok_failed),'genomes. Removing genomes from list')	
-print(prok_failed.head())
-success_ids = list(set(prok_dn['fna'])-set(prok_failed['fna']))
-prok_dn = prok_dn[prok_dn['fna'].isin(success_ids)]
-prok_dn['genome'] = prok_dn['FTP Path'].apply(lambda x: x.split('/')[-1])
+infile = 'prokaryotes_downloaded.txt'
+outfile = 'prokaryotes_metadata.txt'
+
+prok_dn = pd.read_csv(infile,sep='\t')
+prok_dn = prok_dn[prok_dn['metadata_dn']==True] #subset to downloaded metadata
 print(len(prok_dn))
 
 print('Bioproject accessions w/ greatest number of genomes')
@@ -24,7 +21,7 @@ print(prok_dn['BioProject Accession'].value_counts()[:10])
 #Top 3 bioproject are all isolates
 #PRJNA544527: BIO-ML: The Broad Institute-OpenBiome Microbiome Library (>7,000 isolates)
 #PRJNA482748: 1,520 reference genomes from cultivated human gut bacteria isolates
-#PRJNA637878: 2359 bacterial isolates representing 1255 strains that were isolated 
+#PRJNA637878: 2359 bacterial isolates representing 1255 strains that were isolated
 
 def get_metadata(genome,attribute):
 	#returns metadata from ncbi biosample and bioproject data for a given attribute
@@ -45,6 +42,7 @@ print(prok_dn.loc[:,'sample_type'].value_counts())
 
 #removes genomes labels as metagenomic assembly or lack strain name
 prok_iso = prok_dn[prok_dn.loc[:,'sample_type'] != 'metagenomic assembly']
+print(len(prok_iso),'ncbi genomes determined to be isolates')
 prok_iso = prok_iso[prok_iso.loc[:,'Strain'] != '-']
 
 print(len(prok_iso),'ncbi genomes determined to be isolates')
@@ -74,7 +72,7 @@ def find_missing_host(genome):
 	else:
 		return('multiple') #check to see words matching multiple species are found
 
-	
+
 prok_iso.loc[:,'host_inferred'] = prok_iso.loc[:,'genome'].apply(find_missing_host)
 print('checking method to infer host species is consistent')
 print(prok_iso.groupby(['host','host_inferred']).count()) #check to see how host inferred compares to original host designation
@@ -85,8 +83,8 @@ sp_dict = {'Homo sapiens':'human',
 			'Sus scrofa':'pig',
 			'missing':'missing'}
 prok_iso.loc[:,'host_inferred_name'] = prok_iso.loc[:,'host_inferred'].apply(lambda x: sp_dict[x]) #get common name
-			
-			
+
+
 print('several samples missing isolation source info')
 print(prok_iso['isolation_source'].value_counts())
 def find_missing_isolation_source(genome):
@@ -110,10 +108,10 @@ def find_missing_isolation_source(genome):
 		return(hits.index[0])
 	else:
 		return('multiple')
-		
-prok_iso.loc[:,'isolation_source_inferred'] = prok_iso.loc[:,'genome'].apply(find_missing_isolation_source)		
+
+prok_iso.loc[:,'isolation_source_inferred'] = prok_iso.loc[:,'genome'].apply(find_missing_isolation_source)
 #check to see how inferred isolation source compares to original isolation source designation
-print(prok_iso.groupby(['isolation_source','isolation_source_inferred']).count())  
+print(prok_iso.groupby(['isolation_source','isolation_source_inferred']).count())
 print('reclassified isolation source for multiple species')
 
 #get info on infection status
@@ -125,13 +123,13 @@ def infection_status(genome):
 		return(True)
 	else:
 		return(False)
-prok_iso.loc[:,'infection_status'] = prok_iso.loc[:,'genome'].apply(infection_status)		
+prok_iso.loc[:,'infection_status'] = prok_iso.loc[:,'genome'].apply(infection_status)
 
 #subset to relevant columns to match isolate metadata
 prok_iso = prok_iso[['genome','BioSample Accession','geo_loc_name',
 'host_inferred_name','host_inferred','isolation_source_inferred','infection_status']]
 prok_iso.columns = ['isolate','sample','site','host','genus_sp','isolation_source','infection_status']
-prok_iso.to_csv('ncbi_isolate_genomes_metadata.txt',sep='\t',index=False)		
+prok_iso.to_csv(outfile,sep='\t',index=False)
 
 print('copying',len(prok_iso),'isolates genomes to new folder')
 ##move over genomes determined to be isolates
@@ -139,5 +137,3 @@ os.system('rm -r isolate_genomes')
 os.system('mkdir -p isolate_genomes')
 for isolate in prok_iso['isolate']:
 	os.system(f'cp genomes/{isolate}_genomic.fna.gz isolate_genomes/{isolate}.fna.gz')
-
-
