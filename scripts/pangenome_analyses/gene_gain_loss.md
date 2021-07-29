@@ -1,35 +1,16 @@
----
-title: "gene_gain_loss"
-output: 
-  github_document: default
-  html_document: default
----
+gene\_gain\_loss
+================
 
-Run count to assess gene gains and losses 
+Run count to assess gene gains and losses
 
 Identify 50 representative strains for each Bacteroides species
 
-Determine gene gain and loss events for phylogenetically independent comparisons of isolates
-
-```{r setup, include=FALSE}
-rm(list=ls())
-knitr::opts_chunk$set(echo = TRUE)
-knitr::opts_knit$set(root.dir ='/stor/work/Ochman/alex/captive_ape_strain_genomes')
-library(ape)
-library(treeio)
-library(ggtree)
-library(estimatr)
-library(tidyverse)
-library(seqinr)
-library(stringr)
-library(cowplot)
-library(harrietr)
-library(vegan)
-library(data.table)
-```
+Determine gene gain and loss events for phylogenetically independent
+comparisons of isolates
 
 ### Run count
-```{r runCount,message=FALSE,results='hide',warning=FALSE}
+
+``` r
 runCount <- function(species,gain_penalty) {
   
   dir = file.path('results/pangenome',species)
@@ -84,8 +65,11 @@ runCount('Bacteroides_xylanisolvens', 2)
 ```
 
 ### Determine 50 representative strains for each Bacteroides species
-calculate phylogenetic distance and gene content distance among all pairwise combinations
-```{r,warning=FALSE}
+
+calculate phylogenetic distance and gene content distance among all
+pairwise combinations
+
+``` r
 identify_pw_50strain = function(species) {
   #reads in relevant data files
   #identify 50strains based on hclust of tree distances 
@@ -151,10 +135,15 @@ Bth_pw = identify_pw_50strain("Bacteroides_thetaiotaomicron")
 ```
 
 ### Identify phylogenetically independent contrasts for each Bacteroides species
-start with Bxy strain and determine min phylogenetic distance cutoff that gets 3 comparisons between captive ape associated strains and closest human associated strain. 
 
-Determine how many sd this value is below the mean and then apply similar phylogenetic distance cutoff to other Bacteroides species. 
-```{r,warning=FALSE}
+start with Bxy strain and determine min phylogenetic distance cutoff
+that gets 3 comparisons between captive ape associated strains and
+closest human associated strain.
+
+Determine how many sd this value is below the mean and then apply
+similar phylogenetic distance cutoff to other Bacteroides species.
+
+``` r
 get_phylo_independent_comps = function(species,cutoff,outfile) {
   #identify phylogenetically independent pairs of strains
   #given the min cutoff tree dist
@@ -227,24 +216,215 @@ get_phylo_independent_comps = function(species,cutoff,outfile) {
 
 Bxy_cutoff = .008
 Bxy_PIC = get_phylo_independent_comps('Bacteroides_xylanisolvens',Bxy_cutoff)
-(sd_from_mean = (Bxy_cutoff - mean(Bxy_pw$tree_dist))/sd(Bxy_pw$tree_dist))
+```
 
+    ## [1] "Bacteroides_xylanisolvens"
+    ## [1] 1
+    ## [1] 14
+    ## [1] 22
+    ## [1] 4319
+    ## [1] 4355
+    ## [1] 4460
+    ## [1] 4462
+    ## [1] 5013
+    ## [1] 5077
+
+![](gene_gain_loss_files/figure-gfm/unnamed-chunk-2-1.png)<!-- -->
+
+``` r
+(sd_from_mean = (Bxy_cutoff - mean(Bxy_pw$tree_dist))/sd(Bxy_pw$tree_dist))
+```
+
+    ## [1] -2.203635
+
+``` r
 #apply cutoff same sd below mean for other Bt species
 (Bov_cutoff = mean(Bov_pw$tree_dist)+sd_from_mean*sd(Bov_pw$tree_dist))
+```
+
+    ## [1] 0.008729603
+
+``` r
 Bov_PIC = get_phylo_independent_comps('Bacteroides_ovatus',Bov_cutoff)
+```
+
+    ## [1] "Bacteroides_ovatus"
+    ## [1] 1
+    ## [1] 18
+    ## [1] 567
+    ## [1] 572
+    ## [1] 575
+    ## [1] 844
+    ## [1] 946
+
+![](gene_gain_loss_files/figure-gfm/unnamed-chunk-2-2.png)<!-- -->
+
+``` r
 (Bfr_cutoff = mean(Bfr_pw$tree_dist)+sd_from_mean*sd(Bfr_pw$tree_dist))
+```
+
+    ## [1] 0.004798803
+
+``` r
 Bfr_PIC = get_phylo_independent_comps('Bacteroides_fragilis',Bfr_cutoff)
+```
+
+    ## [1] "Bacteroides_fragilis"
+    ## [1] 1
+    ## [1] 9
+    ## [1] 12
+    ## [1] 21
+    ## [1] 2551
+    ## [1] 2553
+    ## [1] 2554
+    ## [1] 2555
+    ## [1] 2568
+    ## [1] 2595
+    ## [1] 2600
+    ## [1] 2621
+    ## [1] 2632
+    ## [1] 2642
+    ## [1] 2643
+    ## [1] 2727
+    ## [1] 2741
+
+![](gene_gain_loss_files/figure-gfm/unnamed-chunk-2-3.png)<!-- -->
+
+``` r
 (Bth_cutoff = mean(Bth_pw$tree_dist)+sd_from_mean*sd(Bth_pw$tree_dist))
+```
+
+    ## [1] 0.008168775
+
+``` r
 Bth_PIC = get_phylo_independent_comps('Bacteroides_thetaiotaomicron',Bth_cutoff)
 ```
-```{r,warning=F,results='hide'}
+
+    ## [1] "Bacteroides_thetaiotaomicron"
+    ## [1] 1
+    ## [1] 5
+    ## [1] 243
+    ## [1] 245
+    ## [1] 248
+    ## [1] 259
+    ## [1] 275
+    ## [1] 305
+
+![](gene_gain_loss_files/figure-gfm/unnamed-chunk-2-4.png)<!-- -->
+
+``` r
 source('scripts/pangenome_analyses/gene_gain_loss_functions.R')
 ```
 
+    ## Loading required package: BiocGenerics
+
+    ## Loading required package: parallel
+
+    ## 
+    ## Attaching package: 'BiocGenerics'
+
+    ## The following objects are masked from 'package:parallel':
+    ## 
+    ##     clusterApply, clusterApplyLB, clusterCall, clusterEvalQ,
+    ##     clusterExport, clusterMap, parApply, parCapply, parLapply,
+    ##     parLapplyLB, parRapply, parSapply, parSapplyLB
+
+    ## The following objects are masked from 'package:dplyr':
+    ## 
+    ##     combine, intersect, setdiff, union
+
+    ## The following objects are masked from 'package:stats':
+    ## 
+    ##     IQR, mad, sd, var, xtabs
+
+    ## The following objects are masked from 'package:base':
+    ## 
+    ##     anyDuplicated, append, as.data.frame, basename, cbind, colnames,
+    ##     dirname, do.call, duplicated, eval, evalq, Filter, Find, get, grep,
+    ##     grepl, intersect, is.unsorted, lapply, Map, mapply, match, mget,
+    ##     order, paste, pmax, pmax.int, pmin, pmin.int, Position, rank,
+    ##     rbind, Reduce, rownames, sapply, setdiff, sort, table, tapply,
+    ##     union, unique, unsplit, which, which.max, which.min
+
+    ## Loading required package: S4Vectors
+
+    ## Loading required package: stats4
+
+    ## 
+    ## Attaching package: 'S4Vectors'
+
+    ## The following objects are masked from 'package:data.table':
+    ## 
+    ##     first, second
+
+    ## The following objects are masked from 'package:dplyr':
+    ## 
+    ##     first, rename
+
+    ## The following object is masked from 'package:tidyr':
+    ## 
+    ##     expand
+
+    ## The following object is masked from 'package:ggtree':
+    ## 
+    ##     expand
+
+    ## The following object is masked from 'package:base':
+    ## 
+    ##     expand.grid
+
+    ## Loading required package: IRanges
+
+    ## 
+    ## Attaching package: 'IRanges'
+
+    ## The following object is masked from 'package:data.table':
+    ## 
+    ##     shift
+
+    ## The following objects are masked from 'package:dplyr':
+    ## 
+    ##     collapse, desc, slice
+
+    ## The following object is masked from 'package:purrr':
+    ## 
+    ##     reduce
+
+    ## The following object is masked from 'package:ggtree':
+    ## 
+    ##     collapse
+
+    ## Loading required package: XVector
+
+    ## 
+    ## Attaching package: 'XVector'
+
+    ## The following object is masked from 'package:purrr':
+    ## 
+    ##     compact
+
+    ## 
+    ## Attaching package: 'Biostrings'
+
+    ## The following object is masked from 'package:seqinr':
+    ## 
+    ##     translate
+
+    ## The following object is masked from 'package:treeio':
+    ## 
+    ##     mask
+
+    ## The following object is masked from 'package:ape':
+    ## 
+    ##     complement
+
+    ## The following object is masked from 'package:base':
+    ## 
+    ##     strsplit
 
 ### Determine gene loss/gain across PIC using either 1 or 2 gain penalty and a windowsize of 5 or 1 genes
-```{r,warning=F,results='hide'}
 
+``` r
 pairwise_gene_gain_runner = function(iso1,iso2,species,gp,window_size) {
   #set input filepaths to run pairwise_gene_gain
   dir = paste0('results/pangenome/',species)
@@ -273,7 +453,19 @@ pairwise_gene_gain_runner = function(iso1,iso2,species,gp,window_size) {
 }
 
 pairwise_gene_gain_runner('P21.11A','GCA.003458755.1.ASM345875v1','Bacteroides_xylanisolvens',gp = 1,window_size =5)
+```
 
+    ## Note: Using an external vector in selections is ambiguous.
+    ## ℹ Use `all_of(nodeName)` instead of `nodeName` to silence this message.
+    ## ℹ See <https://tidyselect.r-lib.org/reference/faq-external-vector.html>.
+    ## This message is displayed once per session.
+
+    ## Note: Using an external vector in selections is ambiguous.
+    ## ℹ Use `all_of(isolate)` instead of `isolate` to silence this message.
+    ## ℹ See <https://tidyselect.r-lib.org/reference/faq-external-vector.html>.
+    ## This message is displayed once per session.
+
+``` r
 Bxy_PIC = read_tsv('results/pangenome/Bacteroides_xylanisolvens/gene_gain_loss/PI_comps.txt',col_types = cols())
 #mapply(pairwise_gene_gain_runner,Bxy_PIC$iso1,Bxy_PIC$iso2,'Bacteroides_xylanisolvens',window_size = 5,gp = 2)
 #mapply(pairwise_gene_gain_runner,Bxy_PIC$iso1,Bxy_PIC$iso2,'Bacteroides_xylanisolvens',window_size = 5,gp = 1)

@@ -4,7 +4,7 @@ Processing pangenome
 Edits metadata, filters out low quality genomes, runs prokka on genome
 assemblies, sets up files to run roary pangenome, generates phylogeny,
 compares annotations from dbcan, sulfatlas, eggnog, and KEGG for
-homologous gene groups, runs count to assess gene gains and losses
+homologous gene groups,
 
 ### Merge NCBI and isolate metadata
 

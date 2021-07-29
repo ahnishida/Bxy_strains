@@ -1,40 +1,15 @@
----
-title: "Figures and Tables"
-output: 
-  github_document: default
-  html_document: default
----
+Figures and Tables
+================
 
-```{r setup, include=FALSE}
-rm(list=ls())
-knitr::opts_chunk$set(echo = TRUE, message=FALSE, warning=FALSE)
-knitr::opts_knit$set(root.dir ='/stor/work/Ochman/alex/captive_ape_strain_genomes')
-library(ape)
-library(treeio)
-library(ggtree)
-library(estimatr)
-library(tidyverse)
-library(seqinr)
-library(stringr)
-library(cowplot)
-library(harrietr)
-library(vegan)
-library(ggnewscale)
-library(ggstance)
-library(RColorBrewer)
-library(Biostrings)
-```
-
-
-```{r}
+``` r
 outdir='figures_tables'
 system('rm -r figures_tables')
 dir.create(outdir)
-
 ```
 
 ### Figure 1, tree plus cols A and B
-```{r figure1}
+
+``` r
 species = 'Bacteroides_xylanisolvens'
 dir = paste0('results/pangenome/',species)
 tree_file = file.path(dir,paste0(species,'.tre'))
@@ -112,7 +87,8 @@ fig1_v4 <- fig1_v4 + new_scale_fill()
 ```
 
 ### Table S3 and Table S4
-```{r}
+
+``` r
 #Table S3: Functional groups enriched in all three captive ape clade since their mcra with closest human-associated strain 
 
 copyNumTable = read_tsv(file.path(dir,'gene_gain_loss/PIC_gene_gain_loss_summary/Bacteroides_xylanisolvens_window5_gp2_copynum.txt'))
@@ -144,6 +120,31 @@ TableS3 = rbind(iso1,iso2) %>%
   arrange(desc(total))
 
 head(TableS3)
+```
+
+    ##                      func_group
+    ## 1      COG3119@2|Bacteria_NA_NA
+    ## 2 COG3250@2|Bacteria_K01190_GH2
+    ## 3     COG0438@2|Bacteria_NA_GT4
+    ## 4      COG0582@2|Bacteria_NA_NA
+    ## 5        2ZA7H@2|Bacteria_NA_NA
+    ## 6  COG1435@2|Bacteria_K21572_NA
+    ##                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                    func_annot
+    ## 1                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                               N-acetylgalactosamine-6-O-sulfatase,Endo-4-O-sulfatase,Delta 4,5-hexuronate-2-O-sulfatase,Alkaline phosphatase PafA,hypothetical protein,N-acetylglucosamine-6-O-sulfatase,Arylsulfatase,Ulvan-active sulfatase,Bifunctional sulfatase/alpha-L-rhamnosidase,Choline-sulfatase
+    ## 2                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                           Beta-galactosidase,Evolved beta-galactosidase subunit alpha,Beta-galactosidase BoGH2A,Putative beta-glucuronidase
+    ## 3 Alpha-D-kanosaminyltransferase,D-inositol-3-phosphate glycosyltransferase,Putative teichuronic acid biosynthesis glycosyltransferase TuaC,N,N'-diacetylbacillosaminyl-diphospho-undecaprenol alpha-1,3-N-acetylgalactosaminyltransferase,GDP-mannose-dependent alpha-(1-6)-phosphatidylinositol monomannoside mannosyltransferase,Glycogen synthase,O-antigen biosynthesis glycosyltransferase WbnH,hypothetical protein,UDP-N-acetylglucosamine--peptide N-acetylglucosaminyltransferase GtfA subunit,Putative glycosyltransferase EpsF,Alpha-maltose-1-phosphate synthase,N-acetylgalactosamine-N,N'-diacetylbacillosaminyl-diphospho-undecaprenol 4-alpha-N-acetylgalactosaminyltransferase,GalNAc-alpha-(1->4)-GalNAc-alpha-(1->3)-diNAcBac-PP-undecaprenol alpha-1,4-N-acetyl-D-galactosaminyltransferase,N-acetyl-alpha-D-glucosaminyl L-malate synthase,Putative glycosyltransferase EpsD,Spore coat protein SA,D-inositol 3-phosphate glycosyltransferase,Alpha-monoglucosyldiacylglycerol synthase,GDP-mannose-dependent alpha-mannosyltransferase
+    ## 4                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                    hypothetical protein,Tyrosine recombinase XerC,Tyrosine recombinase XerD
+    ## 5                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                        hypothetical protein
+    ## 6                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                     hypothetical protein,SusD-like protein P25,SusD-like protein P2,SusD-like protein,SusD-like protein P38
+    ##   gorilla1_P21.11A mixedhost_P14.E4 gorilla2_P21.6E total
+    ## 1                9               24               8    41
+    ## 2                5               13               4    22
+    ## 3                4               11               2    17
+    ## 4                2                9               4    15
+    ## 5                4                7               2    13
+    ## 6                1                7               5    13
+
+``` r
 write_tsv(TableS3,file.path(outdir,'TableS3.txt'))
 
 #Table S4: break up func group COG3119 to see which sulfatase Annotations are convergently gained
@@ -168,12 +169,29 @@ TableS4 = rbind(iso1,iso2) %>%
                 gorilla2_P21.6E = P21.6E,
                 mixedhost_P14.E4 = P14.E4)
 print(TableS4)
+```
+
+    ##                            Annotation gorilla1_P21.11A mixedhost_P14.E4
+    ## 1                       Arylsulfatase                3                5
+    ## 2 N-acetylgalactosamine-6-O-sulfatase                2                3
+    ## 3   N-acetylglucosamine-6-O-sulfatase                2                4
+    ## 4              Ulvan-active sulfatase                6                7
+    ##   gorilla2_P21.6E total
+    ## 1               2    10
+    ## 2               2     7
+    ## 3               2     8
+    ## 4               5    18
+
+``` r
 write_tsv(TableS4,file.path(outdir,'TableS4.txt'))
 ```
 
-### Figure 1 columns C & D 
-Visualize function groups and sulfatase annotations convergently enriched 
-```{r}
+### Figure 1 columns C & D
+
+Visualize function groups and sulfatase annotations convergently
+enriched
+
+``` r
 #inputs: annotation,gene table
 pres_abs <- read_csv(file.path(dir,'roary_nosplitparalogs/gene_presence_absence.csv'),col_types = cols())
 isblank <- function(x) {as.numeric(str_count(x, pattern = "_"))}
@@ -274,14 +292,18 @@ fig1_v5 <- gheatmap(fig1_v4,sulfa_mucin,colnames_angle=90,hjust=1,offset=.07,wid
 fig1_v5  <- fig1_v5 + new_scale_fill()
 (fig1_v6 <- gheatmap(fig1_v5,carrageenen,colnames_angle=90,hjust=1,offset=.13,width=.3)+ 
     scale_fill_viridis_c(option="D",direction = -1))
+```
 
+![](figures_tables_files/figure-gfm/unnamed-chunk-3-1.png)<!-- -->
+
+``` r
 ggsave(fig1_v6,file = file.path(outdir,'Figure1_long.pdf'),width = 10, height=12)
 ggsave(fig1_v6,file = file.path(outdir,'Figure1_short.pdf'),width = 10, height=6)
 ```
 
 ### Figure S1, S2, S3
-```{r}
 
+``` r
 Fig1_sup <- function(species, offset_val1, offset_val2) {
 dir = paste0('results/pangenome/',species)
 
@@ -330,15 +352,31 @@ return(fig1_v3)
 }
 
 (Fig1_Bov = Fig1_sup('Bacteroides_ovatus',0,.012))
+```
+
+![](figures_tables_files/figure-gfm/unnamed-chunk-4-1.png)<!-- -->
+
+``` r
 ggsave(Fig1_Bov,file=file.path(outdir,'FigureSX_BovTree.pdf'))
 (Fig1_Bfr = Fig1_sup('Bacteroides_fragilis',0,.001))
+```
+
+![](figures_tables_files/figure-gfm/unnamed-chunk-4-2.png)<!-- -->
+
+``` r
 ggsave(Fig1_Bfr,file=file.path(outdir,'FigureSX_BfrTree.pdf'))
 (Fig1_Bth = Fig1_sup('Bacteroides_thetaiotaomicron',0,.004))
+```
+
+![](figures_tables_files/figure-gfm/unnamed-chunk-4-3.png)<!-- -->
+
+``` r
 ggsave(Fig1_Bth,file=file.path(outdir,'FigureSX_BthTree.pdf'))
 ```
 
 ### Figure 2A
-```{r}
+
+``` r
 Bt_metadata = 
   read_tsv('results/pangenome/Bacteroides_xylanisolvens/metadata.txt',col_types = cols()) %>%
   sjmisc::add_rows(read_tsv('results/pangenome/Bacteroides_ovatus/metadata.txt',col_types = cols())) %>%
@@ -380,10 +418,154 @@ Bt_rep = Bt_rep %>% group_by(taxonomy_Species.iso1) %>%
 #compare models with quadratic and linear relationship with tree dist
 (m1 = summary(lm_robust(bray_curtis ~ I(norm_tree_dist^2) + norm_tree_dist + taxonomy_Species.iso1 + 
                     norm_tree_dist * taxonomy_Species.iso1, data = Bt_rep)))
+```
 
+    ## 
+    ## Call:
+    ## lm_robust(formula = bray_curtis ~ I(norm_tree_dist^2) + norm_tree_dist + 
+    ##     taxonomy_Species.iso1 + norm_tree_dist * taxonomy_Species.iso1, 
+    ##     data = Bt_rep)
+    ## 
+    ## Standard error type:  HC2 
+    ## 
+    ## Coefficients:
+    ##                                                                   Estimate
+    ## (Intercept)                                                       0.212668
+    ## I(norm_tree_dist^2)                                              -0.001132
+    ## norm_tree_dist                                                    0.013265
+    ## taxonomy_Species.iso1Bacteroides_ovatus                           0.082961
+    ## taxonomy_Species.iso1Bacteroides_thetaiotaomicron                 0.045791
+    ## taxonomy_Species.iso1Bacteroides_xylanisolvens                    0.086627
+    ## norm_tree_dist:taxonomy_Species.iso1Bacteroides_ovatus            0.019303
+    ## norm_tree_dist:taxonomy_Species.iso1Bacteroides_thetaiotaomicron  0.007200
+    ## norm_tree_dist:taxonomy_Species.iso1Bacteroides_xylanisolvens     0.034454
+    ##                                                                  Std. Error
+    ## (Intercept)                                                        0.001342
+    ## I(norm_tree_dist^2)                                                0.002063
+    ## norm_tree_dist                                                     0.001847
+    ## taxonomy_Species.iso1Bacteroides_ovatus                            0.001553
+    ## taxonomy_Species.iso1Bacteroides_thetaiotaomicron                  0.001625
+    ## taxonomy_Species.iso1Bacteroides_xylanisolvens                     0.001668
+    ## norm_tree_dist:taxonomy_Species.iso1Bacteroides_ovatus             0.002806
+    ## norm_tree_dist:taxonomy_Species.iso1Bacteroides_thetaiotaomicron   0.002806
+    ## norm_tree_dist:taxonomy_Species.iso1Bacteroides_xylanisolvens      0.002885
+    ##                                                                   t value
+    ## (Intercept)                                                      158.4854
+    ## I(norm_tree_dist^2)                                               -0.5488
+    ## norm_tree_dist                                                     7.1808
+    ## taxonomy_Species.iso1Bacteroides_ovatus                           53.4177
+    ## taxonomy_Species.iso1Bacteroides_thetaiotaomicron                 28.1830
+    ## taxonomy_Species.iso1Bacteroides_xylanisolvens                    51.9269
+    ## norm_tree_dist:taxonomy_Species.iso1Bacteroides_ovatus             6.8802
+    ## norm_tree_dist:taxonomy_Species.iso1Bacteroides_thetaiotaomicron   2.5657
+    ## norm_tree_dist:taxonomy_Species.iso1Bacteroides_xylanisolvens     11.9412
+    ##                                                                    Pr(>|t|)
+    ## (Intercept)                                                       0.000e+00
+    ## I(norm_tree_dist^2)                                               5.832e-01
+    ## norm_tree_dist                                                    8.438e-13
+    ## taxonomy_Species.iso1Bacteroides_ovatus                           0.000e+00
+    ## taxonomy_Species.iso1Bacteroides_thetaiotaomicron                1.401e-157
+    ## taxonomy_Species.iso1Bacteroides_xylanisolvens                    0.000e+00
+    ## norm_tree_dist:taxonomy_Species.iso1Bacteroides_ovatus            7.060e-12
+    ## norm_tree_dist:taxonomy_Species.iso1Bacteroides_thetaiotaomicron  1.034e-02
+    ## norm_tree_dist:taxonomy_Species.iso1Bacteroides_xylanisolvens     3.055e-32
+    ##                                                                   CI Lower
+    ## (Intercept)                                                       0.210037
+    ## I(norm_tree_dist^2)                                              -0.005178
+    ## norm_tree_dist                                                    0.009643
+    ## taxonomy_Species.iso1Bacteroides_ovatus                           0.079916
+    ## taxonomy_Species.iso1Bacteroides_thetaiotaomicron                 0.042606
+    ## taxonomy_Species.iso1Bacteroides_xylanisolvens                    0.083356
+    ## norm_tree_dist:taxonomy_Species.iso1Bacteroides_ovatus            0.013802
+    ## norm_tree_dist:taxonomy_Species.iso1Bacteroides_thetaiotaomicron  0.001698
+    ## norm_tree_dist:taxonomy_Species.iso1Bacteroides_xylanisolvens     0.028797
+    ##                                                                  CI Upper   DF
+    ## (Intercept)                                                      0.215299 3479
+    ## I(norm_tree_dist^2)                                              0.002913 3479
+    ## norm_tree_dist                                                   0.016887 3479
+    ## taxonomy_Species.iso1Bacteroides_ovatus                          0.086006 3479
+    ## taxonomy_Species.iso1Bacteroides_thetaiotaomicron                0.048977 3479
+    ## taxonomy_Species.iso1Bacteroides_xylanisolvens                   0.089897 3479
+    ## norm_tree_dist:taxonomy_Species.iso1Bacteroides_ovatus           0.024804 3479
+    ## norm_tree_dist:taxonomy_Species.iso1Bacteroides_thetaiotaomicron 0.012702 3479
+    ## norm_tree_dist:taxonomy_Species.iso1Bacteroides_xylanisolvens    0.040111 3479
+    ## 
+    ## Multiple R-squared:  0.6695 ,    Adjusted R-squared:  0.6688 
+    ## F-statistic: 989.6 on 8 and 3479 DF,  p-value: < 2.2e-16
+
+``` r
 #use linear because quad tree_dist term large, 
 (m2 = summary(lm_robust(bray_curtis ~  norm_tree_dist + taxonomy_Species.iso1 + norm_tree_dist * taxonomy_Species.iso1, 
                        data = Bt_rep)))
+```
+
+    ## 
+    ## Call:
+    ## lm_robust(formula = bray_curtis ~ norm_tree_dist + taxonomy_Species.iso1 + 
+    ##     norm_tree_dist * taxonomy_Species.iso1, data = Bt_rep)
+    ## 
+    ## Standard error type:  HC2 
+    ## 
+    ## Coefficients:
+    ##                                                                  Estimate
+    ## (Intercept)                                                      0.212300
+    ## norm_tree_dist                                                   0.013433
+    ## taxonomy_Species.iso1Bacteroides_ovatus                          0.083064
+    ## taxonomy_Species.iso1Bacteroides_thetaiotaomicron                0.045835
+    ## taxonomy_Species.iso1Bacteroides_xylanisolvens                   0.086652
+    ## norm_tree_dist:taxonomy_Species.iso1Bacteroides_ovatus           0.018823
+    ## norm_tree_dist:taxonomy_Species.iso1Bacteroides_thetaiotaomicron 0.007066
+    ## norm_tree_dist:taxonomy_Species.iso1Bacteroides_xylanisolvens    0.034074
+    ##                                                                  Std. Error
+    ## (Intercept)                                                        0.001137
+    ## norm_tree_dist                                                     0.001833
+    ## taxonomy_Species.iso1Bacteroides_ovatus                            0.001534
+    ## taxonomy_Species.iso1Bacteroides_thetaiotaomicron                  0.001622
+    ## taxonomy_Species.iso1Bacteroides_xylanisolvens                     0.001665
+    ## norm_tree_dist:taxonomy_Species.iso1Bacteroides_ovatus             0.002630
+    ## norm_tree_dist:taxonomy_Species.iso1Bacteroides_thetaiotaomicron   0.002798
+    ## norm_tree_dist:taxonomy_Species.iso1Bacteroides_xylanisolvens      0.002754
+    ##                                                                  t value
+    ## (Intercept)                                                      186.760
+    ## norm_tree_dist                                                     7.329
+    ## taxonomy_Species.iso1Bacteroides_ovatus                           54.146
+    ## taxonomy_Species.iso1Bacteroides_thetaiotaomicron                 28.257
+    ## taxonomy_Species.iso1Bacteroides_xylanisolvens                    52.042
+    ## norm_tree_dist:taxonomy_Species.iso1Bacteroides_ovatus             7.156
+    ## norm_tree_dist:taxonomy_Species.iso1Bacteroides_thetaiotaomicron   2.526
+    ## norm_tree_dist:taxonomy_Species.iso1Bacteroides_xylanisolvens     12.373
+    ##                                                                    Pr(>|t|)
+    ## (Intercept)                                                       0.000e+00
+    ## norm_tree_dist                                                    2.872e-13
+    ## taxonomy_Species.iso1Bacteroides_ovatus                           0.000e+00
+    ## taxonomy_Species.iso1Bacteroides_thetaiotaomicron                2.517e-158
+    ## taxonomy_Species.iso1Bacteroides_xylanisolvens                    0.000e+00
+    ## norm_tree_dist:taxonomy_Species.iso1Bacteroides_ovatus            1.005e-12
+    ## norm_tree_dist:taxonomy_Species.iso1Bacteroides_thetaiotaomicron  1.158e-02
+    ## norm_tree_dist:taxonomy_Species.iso1Bacteroides_xylanisolvens     1.927e-34
+    ##                                                                  CI Lower
+    ## (Intercept)                                                      0.210071
+    ## norm_tree_dist                                                   0.009839
+    ## taxonomy_Species.iso1Bacteroides_ovatus                          0.080056
+    ## taxonomy_Species.iso1Bacteroides_thetaiotaomicron                0.042654
+    ## taxonomy_Species.iso1Bacteroides_xylanisolvens                   0.083387
+    ## norm_tree_dist:taxonomy_Species.iso1Bacteroides_ovatus           0.013666
+    ## norm_tree_dist:taxonomy_Species.iso1Bacteroides_thetaiotaomicron 0.001581
+    ## norm_tree_dist:taxonomy_Species.iso1Bacteroides_xylanisolvens    0.028674
+    ##                                                                  CI Upper   DF
+    ## (Intercept)                                                       0.21453 3480
+    ## norm_tree_dist                                                    0.01703 3480
+    ## taxonomy_Species.iso1Bacteroides_ovatus                           0.08607 3480
+    ## taxonomy_Species.iso1Bacteroides_thetaiotaomicron                 0.04901 3480
+    ## taxonomy_Species.iso1Bacteroides_xylanisolvens                    0.08992 3480
+    ## norm_tree_dist:taxonomy_Species.iso1Bacteroides_ovatus            0.02398 3480
+    ## norm_tree_dist:taxonomy_Species.iso1Bacteroides_thetaiotaomicron  0.01255 3480
+    ## norm_tree_dist:taxonomy_Species.iso1Bacteroides_xylanisolvens     0.03947 3480
+    ## 
+    ## Multiple R-squared:  0.6695 ,    Adjusted R-squared:  0.6688 
+    ## F-statistic:  1129 on 7 and 3480 DF,  p-value: < 2.2e-16
+
+``` r
 write.table(m2$coefficients,file=file.path(outdir,'TableS5_model_coef.txt'))
 
 (Figure2C = Bt_rep  %>% 
@@ -402,14 +584,21 @@ write.table(m2$coefficients,file=file.path(outdir,'TableS5_model_coef.txt'))
               method = "lm",color='blue4', formula = y ~  x, size = 1, se=TRUE)+
   ylab('Pangenome distance (Bray-Curtis)')+
   xlab('Normalized phylogenetic distance'))
+```
+
+![](figures_tables_files/figure-gfm/unnamed-chunk-5-1.png)<!-- -->
+
+``` r
 Figure2B <- get_legend(Figure2C)
 
 left = plot_grid(Figure2A+theme(axis.title.x= element_blank()),Figure2B,ncol=1,rel_heights = c(1,.5))
 Figure2 = plot_grid(left,Figure2C+theme(legend.position="none"))
 ggsave(Figure2,file=file.path(outdir,'Figure2_geneContentBt.pdf'))
 ```
-### Figure 3 
-```{r}
+
+### Figure 3
+
+``` r
 species = 'Bacteroides_xylanisolvens'
 suffix = 'window5_gp2'
 dir = file.path('results/pangenome/',species)
@@ -431,6 +620,19 @@ PI_comps_long = PI_comps %>%
     select(iso,everything())
 tree_PI = drop.tip(tree,setdiff(tree$tip.label,PI_comps_long$iso))  
 tree_PI
+```
+
+    ## 
+    ## Phylogenetic tree with 18 tips and 17 internal nodes.
+    ## 
+    ## Tip labels:
+    ##   GCA.009102105.1.ASM910210v1, GCA.015547545.1.ASM1554754v1, GCA.009102805.1.ASM910280v1, GCA.009101945.1.ASM910194v1, GCA.015551805.1.ASM1555180v1, GCA.000210075.1.ASM21007v1, ...
+    ## Node labels:
+    ##   60, 61, 100, 100, 100, 100, ...
+    ## 
+    ## Rooted; includes branch lengths.
+
+``` r
 fig3_v1 <- ggtree(tree_PI ) %<+% PI_comps_long + 
     geom_tippoint(aes(subset=(label%in%PI_comps_long$iso),
                       color = factor(compNum))) +
@@ -541,11 +743,17 @@ gain_loss_gene_prop = island_df5 %>%
 bottom = plot_grid(gain_loss_events_prop, gain_loss_gene_prop)
 
 (Figure3 = plot_grid(fig3_v4,bottom,ncol=1))
+```
+
+![](figures_tables_files/figure-gfm/unnamed-chunk-6-1.png)<!-- -->
+
+``` r
 ggsave(Figure3,file=file.path(outdir,'Figure3_geneGainLoss.pdf'))
 ```
 
-### Duplications 
-```{r}
+### Duplications
+
+``` r
 dup = island_df2  %>% 
     group_by(iso_category,gainloss,size_category,is_dup) %>%
     summarise(number_events = n(),
@@ -556,15 +764,31 @@ dup %>% filter(gainloss == 'gain') %>%
   group_by(is_dup) %>% 
   summarize(number_events = sum(number_events)) %>%
   mutate(proportion = number_events/sum(number_events))
+```
 
+    ## # A tibble: 2 x 3
+    ##   is_dup number_events proportion
+    ##    <dbl>         <int>      <dbl>
+    ## 1      0          1585      0.860
+    ## 2      1           259      0.140
+
+``` r
 #what fraction of SMALL(1-5) gene gain events are duplications?
 dup %>% filter(gainloss == 'gain',size_category == '01-5') %>%
   group_by(is_dup) %>% 
   summarize(number_events = sum(number_events)) %>%
   mutate(proportion = number_events/sum(number_events))
 ```
+
+    ## # A tibble: 2 x 3
+    ##   is_dup number_events proportion
+    ##    <dbl>         <int>      <dbl>
+    ## 1      0          1088      0.808
+    ## 2      1           259      0.192
+
 ### Gain penalty of 1
-```{r}
+
+``` r
 species = 'Bacteroides_xylanisolvens'
 suffix = 'window5_gp1'
 dir = file.path('results/pangenome/',species)
@@ -593,12 +817,17 @@ df = rbind(iso1,iso2) %>%
   scale_fill_manual(values=c('pink','lightblue','firebrick','blue4'))+
   theme_cowplot()  +
   theme(legend.position="top"))
+```
 
+![](figures_tables_files/figure-gfm/unnamed-chunk-8-1.png)<!-- -->
+
+``` r
 ggsave(FigSX_gainpenalty1,file=file.path(outdir,'FigureSX_gainpenalty1.pdf'))
 ```
 
 ### G50/L50 - sliding window 1 vs sl
-```{r}
+
+``` r
 species = 'Bacteroides_xylanisolvens'
 suffix = 'window5_gp2'
 dir = file.path('results/pangenome/',species)
@@ -622,10 +851,15 @@ G50L50 = rbind(iso1,iso2) %>%
 (G50L50_window1_vs_window5 = G50L50 %>% ggplot(aes(x=name,y=count,fill=window)) + 
   geom_boxplot() +
   theme_bw())
+```
+
+![](figures_tables_files/figure-gfm/unnamed-chunk-9-1.png)<!-- -->
+
+``` r
 ggsave(G50L50_window1_vs_window5,file=file.path(outdir,'FigureSX_G50L50_window1_vs_window5.pdf'))
 ```
 
-```{r}
+``` r
 species = 'Bacteroides_xylanisolvens'
 suffix = 'window5_gp2'
 dir = file.path('results/pangenome/',species)
@@ -665,12 +899,17 @@ G50L50 = rbind(iso1,iso2) %>%
 (G50L50_Btspecies = G50L50 %>% ggplot(aes(x=taxonomy_Species,y=count,fill=name)) + 
   geom_boxplot() +
   theme_bw())
+```
+
+![](figures_tables_files/figure-gfm/unnamed-chunk-10-1.png)<!-- -->
+
+``` r
 ggsave(G50L50_Btspecies,file=file.path(outdir,'FigureSX_G50L50_Btspecies.pdf'))
 ```
 
-
 ### Figure 4
-```{r}
+
+``` r
 species = 'Bacteroides_xylanisolvens'
 dir = paste0('results/pangenome/',species)
 metadata_file = file.path(dir,'metadata.txt')
@@ -697,6 +936,20 @@ captive_clade_table <- gene_table %>%
   tally() %>%
   pivot_wider(names_from=captive_clade,values_from=n,values_fill=0) 
 head(captive_clade_table)  
+```
+
+    ## # A tibble: 6 x 5
+    ## # Groups:   Gene [6]
+    ##   Gene  unassigned gorilla1 gorilla2 mixedhost
+    ##   <chr>      <int>    <int>    <int>     <int>
+    ## 1 aadK          37        0        0         0
+    ## 2 aaeB           1        0        0         0
+    ## 3 abf2          93        4       13        22
+    ## 4 abgT          93        4       13        22
+    ## 5 abnA          47        0        0         0
+    ## 6 accA           1        0        0         0
+
+``` r
 #identify ≈ as genes present in 2 or 3 clades and fewer than 3 humans
 captive_clade_table <- captive_clade_table %>%  
   mutate(mixedhost = as.numeric(mixedhost),
@@ -710,6 +963,11 @@ captive_clade_table <- captive_clade_table %>%
 #subset gene table to captive_convergent_genes
 captive_convergent_genes <- captive_clade_table$Gene
 print(length(captive_clade_table$Gene))
+```
+
+    ## [1] 178
+
+``` r
 captive_gene_table <- gene_table %>% 
   filter(Gene %in% captive_convergent_genes) %>%
   column_to_rownames(var='Gene') %>%
@@ -741,14 +999,21 @@ p <- gheatmap(ggtree(tree) + ylim(-10,NA),
 p <- p + new_scale_fill()
 (p2 <- gheatmap(p,captive_gene_table,offset=.05,colnames_angle=90,hjust=1) +
                 scale_fill_viridis_c(option="C"))
+```
 
+![](figures_tables_files/figure-gfm/unnamed-chunk-11-1.png)<!-- -->
+
+``` r
 dir.create(file.path(dir,'captive_convergent_genes'))
 saveRDS(captive_convergent_genes,file=file.path(dir,'captive_convergent_genes','gene_list.RDS'))
 ```
 
 ### Figure 5
-Compare distribution of sulfatase genes in XB1A model to strains isolated from captive apes
-```{r}
+
+Compare distribution of sulfatase genes in XB1A model to strains
+isolated from captive apes
+
+``` r
 sulfa_outdir = file.path(dir,'sulfatase_circle')
 dir.create(sulfa_outdir)
 
@@ -765,14 +1030,14 @@ set.seed(131)
 
 ###subset from all protein seqs to only sulfatase genes in captive ape strains
 #all_prot file not uploaded to github showing how sulftase.faa was generated
-#all_prot_file = file.path(dir,'all_prot.faa') 
-#all_prot = readAAStringSet(all_prot_file)
-#names(all_prot) <- sapply(strsplit(names(all_prot)," "), `[`, 1)
-#sulfatase_prot = all_prot[names(all_prot) %in% sulfatase_genes$Gene.ID] 
+all_prot_file = file.path(dir,'all_prot.faa') 
+all_prot = readAAStringSet(all_prot_file)
+names(all_prot) <- sapply(strsplit(names(all_prot)," "), `[`, 1)
+sulfatase_prot = all_prot[names(all_prot) %in% sulfatase_genes$Gene.ID] 
 sulfatase_prot_file = file.path(sulfa_outdir,'sulfatase.faa')
-#writeXStringSet(sulfatase_prot,sulfatase_prot_file)
-#system(paste0('mafft --auto ',sulfatase_prot_file,' > ',sulfatase_prot_file,'.align'))
-#system(paste0('fasttree ',sulfatase_prot_file,'.align > ',sulfatase_prot_file,'.tree'))
+writeXStringSet(sulfatase_prot,sulfatase_prot_file)
+system(paste0('mafft --auto ',sulfatase_prot_file,' > ',sulfatase_prot_file,'.align'))
+system(paste0('fasttree ',sulfatase_prot_file,'.align > ',sulfatase_prot_file,'.tree'))
   
 present_in_isolates <- function(list_of_genes,list_of_isolates,name) {
   #given list of genes and isolates, determine the total number of genes present in isolates
@@ -810,28 +1075,91 @@ pres = pres %>% select(!contains('total'))
 pres = pres[rowSums(is.na(pres)) != ncol(pres), ]
 #total number of sulfatase groups
 nrow(pres)
+```
+
+    ## [1] 91
+
+``` r
 #total number of sulfatase groups
 core = pres[rowSums(!is.na(pres)) == ncol(pres), ]
 nrow(core)
+```
+
+    ## [1] 14
+
+``` r
 #captive only number of sulfatase groups
 captive_only = pres %>% filter(is.na(human_cladeC),is.na(human_cladeB),is.na(human_cladeA))
 captive_only %>% group_by_all() %>% tally()
+```
+
+    ## # A tibble: 2 x 7
+    ## # Groups:   mixedhost_cladeA, gorilla1_cladeA, gorilla2_cladeB, human_cladeA,
+    ## #   human_cladeB [2]
+    ##   mixedhost_cladeA gorilla1_cladeA gorilla2_cladeB human_cladeA human_cladeB
+    ##   <chr>            <chr>           <chr>           <chr>        <chr>       
+    ## 1 mixedhost_cladeA gorilla1_cladeA gorilla2_cladeB <NA>         <NA>        
+    ## 2 mixedhost_cladeA <NA>            gorilla2_cladeB <NA>         <NA>        
+    ## # … with 2 more variables: human_cladeC <chr>, n <int>
+
+``` r
 #human only number of sulfatase groups
 human_only = pres %>% filter(is.na(mixedhost_cladeA),is.na(gorilla1_cladeA),is.na(gorilla2_cladeB))
 human_only %>% group_by_all() %>% tally()
+```
+
+    ## # A tibble: 2 x 7
+    ## # Groups:   mixedhost_cladeA, gorilla1_cladeA, gorilla2_cladeB, human_cladeA,
+    ## #   human_cladeB [2]
+    ##   mixedhost_cladeA gorilla1_cladeA gorilla2_cladeB human_cladeA human_cladeB
+    ##   <chr>            <chr>           <chr>           <chr>        <chr>       
+    ## 1 <NA>             <NA>            <NA>            human_cladeA <NA>        
+    ## 2 <NA>             <NA>            <NA>            <NA>         <NA>        
+    ## # … with 2 more variables: human_cladeC <chr>, n <int>
+
+``` r
 #mixedhost_cladeA number of sulfatase groups
 pres %>% filter(!is.na(mixedhost_cladeA)) %>% nrow()
+```
+
+    ## [1] 68
+
+``` r
 #gorilla1_cladeA number of sulfatase groups
 pres %>% filter(!is.na(gorilla1_cladeA)) %>% nrow()
+```
+
+    ## [1] 38
+
+``` r
 #gorilla2_cladeB number of sulfatase groups
 pres %>% filter(!is.na(gorilla2_cladeB)) %>% nrow()
+```
+
+    ## [1] 51
+
+``` r
 #human_cladeA number of sulfatase groups
 pres %>% filter(!is.na(human_cladeA)) %>% nrow()
+```
+
+    ## [1] 77
+
+``` r
 #human_cladeB number of sulfatase groups
 pres %>% filter(!is.na(human_cladeB)) %>% nrow()
+```
+
+    ## [1] 38
+
+``` r
 #human_cladeC number of sulfatase groups
 pres %>% filter(!is.na(human_cladeC)) %>% nrow()
+```
 
+    ## [1] 23
+
+``` r
 sulfadata  <- pres %>%
   rownames_to_column(var='Gene')%>%
   left_join(annotation,by='Gene') 
@@ -880,16 +1208,33 @@ got_subfam_node <- function(sub){
 
 #number of orthologous gene groups per sulfatase subfamily
 table(sulfadata$sulfatlas_subfamily)
+```
+
+    ## 
+    ##  4  7  8  9 11 14 15 16 19 20 22 24 25 27 28 30 31 46 50 53 55 62 67 
+    ##  7  3 12  2  2  3  6  3  1  3  2  1  1  2  2  3  1  1  1  1  1  1  2
+
+``` r
 nodes = lapply(unique(sulfadata$sulfatlas_subfamily),got_subfam_node)
 names(nodes) = unique(sulfadata$sulfatlas_subfamily)
 unlist(nodes) #subfamily & node
+```
+
+    ##  15  27   9  20  11  67   4  14   8  22   7  16  30  28 
+    ## 153 114 108 149 118 105 143 133 163 160  97 138 112 180
+
+``` r
 #singleton subfamilies with 1 rep
 singleton_S1 = names(table(sulfadata$sulfatlas_subfamily))[table(sulfadata$sulfatlas_subfamily)==1]
 singleton_S1 = sulfadata %>% filter(sulfatlas_subfamily %in% singleton_S1) 
 #groups with unassigned subfamilies
 unassigned_S1 = sulfadata %>% filter(is.na(sulfatlas_subfamily))
 nrow(unassigned_S1)
+```
 
+    ## [1] 30
+
+``` r
 #add sulfatase subfamilies to tree
 sulfa_tree_gg_v2 = sulfa_tree_gg +
   geom_hilight(node=153, fill="darkgreen", alpha=.1) + 
@@ -924,6 +1269,11 @@ sulfa_tree_gg_v3 = sulfa_tree_gg_v2 %<+% sulfadata + xlim(NA, 5) +
     geom_tiplab(aes(label=sulfatlas_subfamily, subset=(label%in%singleton_S1$Gene)), parse=T) +
     geom_tippoint(aes(label=sulfatlas_subfamily, subset=(label%in%singleton_S1$Gene)),fill = 'blue',shape=23,parse=T)
 sulfa_tree_gg_v3
+```
+
+![](figures_tables_files/figure-gfm/unnamed-chunk-12-1.png)<!-- -->
+
+``` r
 color_vec <- recode(sort(colnames(pres)),
       "gorilla1_cladeA"="#1B9E77", #darkgreen
       "mixedhost_cladeA"="#7570B3", #purple
@@ -937,13 +1287,21 @@ p <- gheatmap(sulfa_tree_gg_v3,pres,colnames_angle=90,hjust=1,width=.4)  +
 p <- p + new_scale_fill()
 (p2 <- gheatmap(p,func,colnames_angle=90,hjust=1,offset=1,width=.05) +
     scale_fill_manual(values = brewer.pal(15, "Paired")))
+```
+
+![](figures_tables_files/figure-gfm/unnamed-chunk-12-2.png)<!-- -->
+
+``` r
 ggsave(p2,file=file.path(outdir,'Figure5_sulfatase_circle.pdf'),height=12,width=10)
 ```
 
-#### Determine AAI within orthologous genes 
-Shows leg work behind how AAI is calculated, requires all_prot.faa generated from processing_pangenome
-final table with AAI among sulfatase genes is uploaded 
-```{r echo=TRUE, message=FALSE, warning=FALSE}
+#### Determine AAI within orthologous genes
+
+Shows leg work behind how AAI is calculated, requires all\_prot.faa
+generated from processing\_pangenome final table with AAI among
+sulfatase genes is uploaded
+
+``` r
 AAI_outdir = file.path(dir,'gene_AAI')
 dir.create(AAI_outdir)
 
@@ -993,15 +1351,20 @@ sulfatase_OG_AAI = read_tsv(file=file.path(sulfa_outdir,'sulfatase_OG_AAI.txt'))
 summary(sulfatase_OG_AAI$ave_AAI)
 ```
 
+    ##    Min. 1st Qu.  Median    Mean 3rd Qu.    Max. 
+    ##   86.27   94.18   97.88   96.75   99.67  100.00
 
 #### blastp of sulfatase genes to sulfatlas
-requires download of sulfatlas as show in processing_pangenome, blastp results uploads
-```{bash}
+
+requires download of sulfatlas as show in processing\_pangenome, blastp
+results uploads
+
+``` bash
 #cd results/pangenome/Bacteroides_xylanisolvens
 #blastp -query sulfatase_circle/sulfatase.faa -db sulfatlas/sulfatlas_v1.3.faa -qcov_hsp_perc 80 -outfmt "6 qseqid sseqid #salltitles pident evalue" -out sulfatase_circle/sulfatase_blastp.txt
 ```
 
-```{r echo=TRUE, message=FALSE, warning=FALSE}
+``` r
 #read in blast results
 sulfa_blastp = read_tsv(file.path(sulfa_outdir,'sulfatase_blastp.txt'),
                       comment='#',col_names = FALSE, col_types = cols())
@@ -1029,7 +1392,33 @@ sulfa_blastp <- sulfa_blastp %>%
      as.data.frame() %>%
   pivot_wider(names_from=Genus_sp,values_from=pident,values_fill=NA)
 head(sulfa_blastp)
+```
 
+    ## # A tibble: 6 x 32
+    ##   Gene.ID   Bacteroides_ovat… Bacteroides_sp. Bacteroides_acid… Bacteroides_cac…
+    ##   <chr>                 <dbl>           <dbl>             <dbl>            <dbl>
+    ## 1 AAFILABK…             100               100              NA               NA  
+    ## 2 AAFILABK…             100                NA              NA               NA  
+    ## 3 AAFILABK…              99.4              NA              NA               NA  
+    ## 4 AAFILABK…              98.4              NA              NA               NA  
+    ## 5 AAFILABK…              89.8              NA              NA               NA  
+    ## 6 BALBAENG…             100               100              92.5             92.7
+    ## # … with 27 more variables: Bacteroides_xylanisolvens <dbl>,
+    ## #   Bacteroides_thetaiotaomicron <dbl>, Bacteroides_finegoldii <dbl>,
+    ## #   Bacteroides_caecimuris <dbl>, Bacteroides_faecichinchillae <dbl>,
+    ## #   Bacteroides_faecis <dbl>, uncultured_Bacteroides <dbl>,
+    ## #   Bacteroides_nordii <dbl>, Bacteroides_pyogenes <dbl>,
+    ## #   Bacteroides_salyersiae <dbl>, gut_metagenome <dbl>,
+    ## #   Parabacteroides_merdae <dbl>, Bacteroides_cellulosilyticus <dbl>,
+    ## #   Bacteroides_dorei <dbl>, Bacteroides_fragilis <dbl>,
+    ## #   Bacteroides_intestinalis <dbl>, Bacteroides_oleiciplenus <dbl>,
+    ## #   Bacteroides_plebeius <dbl>, Bacteroides_stercorirosoris <dbl>,
+    ## #   Bacteroides_vulgatus <dbl>, Phocaeicola_vulgatus <dbl>,
+    ## #   Bacteroides_clarus <dbl>, Bacteroides_eggerthii <dbl>,
+    ## #   Bacteroides_helcogenes <dbl>, Bacteroides_reticulotermitis <dbl>,
+    ## #   Bacteroides_stercoris <dbl>, Bacteroides_uniformis <dbl>
+
+``` r
 #combine with AAI results
 table_sulfadata_captive = sulfadata %>% 
   select(Gene,Gene.ID,Annotation,sulfatlas_subfamily,mixedhost_cladeA,gorilla1_cladeA,gorilla2_cladeB,human_cladeA,human_cladeB,human_cladeC)  %>%
@@ -1054,6 +1443,51 @@ table_sulfadata_captive = table_sulfadata_captive %>%
          gut_metagenome,Parabacteroides_merdae)
 table_sulfadata_captive$Bt_sp = Bt_sp
 head(table_sulfadata_captive)
-write_tsv(table_sulfadata_captive,file.path(outdir,'TableS6_sulfatase_blastp.txt'))
 ```
 
+    ##         Gene        Gene.ID                          Annotation
+    ## 1 group_1490 KENJADKH_01220 N-acetylgalactosamine-6-O-sulfatase
+    ## 2 group_5562 KENJADKH_04792                  Endo-4-O-sulfatase
+    ## 3 group_2339 KENJADKH_02809  Delta 4,5-hexuronate-2-O-sulfatase
+    ## 4     atsA_2 KENJADKH_00964 N-acetylgalactosamine-6-O-sulfatase
+    ## 5  group_683 KENJADKH_00378 N-acetylgalactosamine-6-O-sulfatase
+    ## 6 group_1598 KENJADKH_02788   N-acetylglucosamine-6-O-sulfatase
+    ##   sulfatlas_subfamily mixedhost_cladeA gorilla1_cladeA gorilla2_cladeB
+    ## 1                  15 mixedhost_cladeA gorilla1_cladeA gorilla2_cladeB
+    ## 2                  27 mixedhost_cladeA gorilla1_cladeA gorilla2_cladeB
+    ## 3                   9 mixedhost_cladeA gorilla1_cladeA gorilla2_cladeB
+    ## 4                  20 mixedhost_cladeA gorilla1_cladeA gorilla2_cladeB
+    ## 5                  15 mixedhost_cladeA gorilla1_cladeA gorilla2_cladeB
+    ## 6                  11 mixedhost_cladeA gorilla1_cladeA gorilla2_cladeB
+    ##   human_cladeA human_cladeB human_cladeC  ave_AAI Bacteroides_xylanisolvens
+    ## 1 human_cladeA human_cladeB human_cladeC 91.36276                       100
+    ## 2 human_cladeA human_cladeB human_cladeC 96.47488                       100
+    ## 3 human_cladeA human_cladeB human_cladeC 94.03305                       100
+    ## 4 human_cladeA human_cladeB human_cladeC 91.45549                       100
+    ## 5 human_cladeA human_cladeB human_cladeC 86.92707                       100
+    ## 6 human_cladeA human_cladeB human_cladeC 93.03145                       100
+    ##   Bacteroides_ovatus Bacteroides_thetaiotaomicron Bacteroides_finegoldii
+    ## 1             99.022                       89.041                 91.585
+    ## 2             97.868                       91.535                 92.636
+    ## 3             97.131                       94.467                 93.840
+    ## 4             95.745                       87.835                 88.660
+    ## 5             99.803                       87.598                 98.819
+    ## 6             97.154                       92.220                 93.416
+    ##   Bacteroides_caecimuris Bacteroides_faecis gut_metagenome
+    ## 1                 96.673             88.650         86.301
+    ## 2                 98.643             91.929         85.328
+    ## 3                 97.336             92.828             NA
+    ## 4                     NA             86.804             NA
+    ## 5                 98.622                 NA             NA
+    ## 6                     NA             91.841             NA
+    ##   Parabacteroides_merdae Bt_sp
+    ## 1                     NA   100
+    ## 2                     NA   100
+    ## 3                     NA   100
+    ## 4                     NA   100
+    ## 5                     NA   100
+    ## 6                     NA   100
+
+``` r
+write_tsv(table_sulfadata_captive,file.path(outdir,'TableS6_sulfatase_blastp.txt'))
+```
