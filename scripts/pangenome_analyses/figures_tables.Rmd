@@ -1,0 +1,738 @@
+---
+title: "Untitled"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+rm(list=ls())
+knitr::opts_chunk$set(echo = TRUE, message=FALSE, warning=FALSE)
+knitr::opts_knit$set(root.dir ='/stor/work/Ochman/alex/captive_ape_strain_genomes')
+library(ape)
+library(treeio)
+library(ggtree)
+library(estimatr)
+library(tidyverse)
+library(seqinr)
+library(stringr)
+library(cowplot)
+library(harrietr)
+library(vegan)
+library(ggnewscale)
+library(ggstance)
+library(RColorBrewer)
+library(Biostrings)
+```
+
+
+```{r}
+outdir='figures_tables'
+dir.create(outdir)
+```
+
+### Figure 1, tree plus cols A and B
+```{r figure1}
+species = 'Bacteroides_xylanisolvens'
+dir = paste0('results/pangenome/',species)
+tree_file = file.path(dir,paste0(species,'.tre'))
+tree = read.tree(tree_file)
+
+#drop outgroups from tree
+metadata_file = file.path(dir,'metadata.txt')
+metadata = read_tsv(metadata_file,col_types = cols())
+outgroup = metadata %>% filter(taxonomy_Species!=species) %>% pull(isolate)
+tree = drop.tip(tree,outgroup) 
+
+#add PIC to tree
+PI_comps_file = file.path(dir,'PI_comps.txt')
+PI_comps = read_tsv(PI_comps_file)
+PI_comps_long = PI_comps %>% 
+    mutate(compNum = 1:nrow(PI_comps)) %>% 
+    tidyr::pivot_longer(cols=c(iso1,iso2), names_to='1vs2') %>%
+    dplyr::rename('iso'='value') %>%
+    select(iso,everything())
+fig1_v1 <- ggtree(tree) %<+% PI_comps_long + 
+    geom_tippoint(aes(subset=(label%in%PI_comps_long$iso),
+                      color = factor(compNum))) +
+    geom_nodepoint(aes(subset = suppressWarnings(as.numeric(label)) > 90),size=.75) + #add bootstrap 
+    geom_treescale() #add scale
+
+#add clade labels
+cladeA_MCRA <- ape::getMRCA(tree,metadata$isolate[metadata$clade=='cladeA'])
+cladeB_MCRA <- ape::getMRCA(tree,metadata$isolate[metadata$clade=='cladeB'])
+cladeC_MCRA <- ape::getMRCA(tree,metadata$isolate[metadata$clade=='cladeC'])
+mixedhostNode <- ape::getMRCA(tree,metadata$isolate[metadata$captive_clade=='mixedhost'])
+gorilla1Node <- ape::getMRCA(tree,metadata$isolate[metadata$captive_clade=='gorilla1'])
+gorilla2Node <- ape::getMRCA(tree,metadata$isolate[metadata$captive_clade=='gorilla2'])
+fig1_v2 = fig1_v1 + #add clade labels
+   geom_cladelabel(node=cladeA_MCRA,label="cladeA",offset = .005)+
+   geom_cladelabel(node=cladeB_MCRA,label="cladeB",offset = .005)+
+   geom_cladelabel(node=cladeC_MCRA,label="cladeC",offset = .005)+
+   geom_cladelabel(node=mixedhostNode,label="mixedhost",offset = .01) +
+   geom_cladelabel(node=gorilla1Node,label="gorilla1",offset = .01)+ 
+   geom_cladelabel(node=gorilla2Node,label="gorilla2",offset = .01) +
+   geom_tippoint(aes(subset=(label=='GCA.000210075.1.ASM21007v1')),color='red') 
+
+#column A
+HOST_table <- metadata %>% 
+  select(isolate,host) %>%
+  column_to_rownames(var='isolate') 
+offset_val1 = .022
+
+get_color_palette <- function(tips,metadata) {
+  metadata <- metadata %>% filter(isolate %in% tips)
+  vec <- sort(unique(metadata$host))
+  return(recode(vec,
+                          'human'='cadetblue4',
+                          'rumen' = 'brown4',
+                          'bonobo'='red2',
+                          'chimpanzee'='orange2',
+                          'orangutan'='purple4',
+                          'gorilla'='green3',
+                          'chicken'='tan',
+                          'mouse' = 'yellow2',
+                          'pig' = 'pink',
+                          'missing'='white'))}
+
+fig1_v3 <- gheatmap(fig1_v2 + ylim(-10,NA),colnames = FALSE,offset=.05,
+    HOST_table,width=.1,colnames_angle=90,hjust=1)  + 
+    scale_fill_manual(values=get_color_palette(fig1_v2$data$label,metadata))
+#column B
+predicted.genes = metadata %>% select(isolate,predicted.genes) %>%
+  mutate(predicted.genes=as.numeric(predicted.genes)) %>%
+  column_to_rownames(var='isolate')
+fig1_v3 <- fig1_v3 + new_scale_fill()
+fig1_v4 <- gheatmap(fig1_v3,predicted.genes,
+                               colnames_angle=90,hjust=1,width=.1,offset = .06) + 
+    scale_fill_viridis_c(direction = -1, option="D")
+fig1_v4 <- fig1_v4 + new_scale_fill()
+```
+
+### Table S3 and Table S4
+```{r}
+#Table S3: Functional groups enriched in all three captive ape clade since their mcra with closest human-associated strain 
+
+copyNumTable = read_tsv(file.path(dir,'pairwise_gene_gain_summary/Bacteroides_xylanisolvens_window5_gp2_copynum.txt'))
+annotation = read_tsv(file= file.path(dir,'Bxy_roary_nosplitparalogs_annotation.txt'),
+                      col_types = cols())
+
+copyNumTable_annotation = copyNumTable  %>% #add annotation info to copy number table 
+  left_join(select(annotation,Gene,func_group,func_annot,Annotation),by='Gene')
+copyNum_funcGroup = copyNumTable_annotation %>% #
+  group_by(func_group,func_annot,iso1,iso2) %>% 
+  summarise(copyChangeMrca_iso1 = sum(copynum_iso1)-sum(mrca),
+            copyChangeMrca_iso2 = sum(copynum_iso2)-sum(mrca)) %>% 
+  as.data.frame()
+iso1 = copyNum_funcGroup %>% dplyr::select(func_group,func_annot,iso1,copyChangeMrca_iso1) %>% 
+  dplyr::rename(isolate = iso1,copyChangeMrca = copyChangeMrca_iso1)
+iso2 = copyNum_funcGroup %>% dplyr::select(func_group,func_annot,iso2,copyChangeMrca_iso2) %>%
+  dplyr::rename(isolate = iso2,copyChangeMrca = copyChangeMrca_iso2)
+TableS3 = rbind(iso1,iso2) %>% 
+  as.data.frame() %>% 
+  pivot_wider(names_from = isolate, values_from = copyChangeMrca) %>% 
+  select(func_group,func_annot,P21.11A,P14.E4,P21.6E) %>% 
+  filter(P21.11A>0,P14.E4>0,P21.6E>0) %>%
+  as.data.frame() %>% 
+  filter(func_group != 'NA_NA_NA') %>% 
+  mutate(total = P21.11A+P14.E4+P21.6E) %>% 
+  dplyr::rename(gorilla1_P21.11A = P21.11A,
+                gorilla2_P21.6E = P21.6E,
+                mixedhost_P14.E4 = P14.E4)
+write_tsv(TableS3,file.path(outdir,'TableS3.txt'))
+
+#Table S4: break up func group COG3119 to see which sulfatase Annotations are convergently gained
+sulfatase_Annotation = copyNumTable_annotation  %>% #
+  filter(str_detect(func_group,'COG3119')) %>%
+  group_by(Annotation,iso1,iso2) %>% 
+  summarise(copyChangeMrca_iso1 = sum(copynum_iso1)-sum(mrca),
+            copyChangeMrca_iso2 = sum(copynum_iso2)-sum(mrca)) %>% 
+  as.data.frame()
+iso1 = sulfatase_Annotation %>% dplyr::select(Annotation,iso1,copyChangeMrca_iso1) %>% 
+  dplyr::rename(isolate = iso1,copyChangeMrca = copyChangeMrca_iso1)
+iso2 = sulfatase_Annotation %>% dplyr::select(Annotation,iso2,copyChangeMrca_iso2) %>%
+  dplyr::rename(isolate = iso2,copyChangeMrca = copyChangeMrca_iso2)
+TableS4 = rbind(iso1,iso2) %>% 
+  as.data.frame() %>% 
+  pivot_wider(names_from = isolate, values_from = copyChangeMrca) %>% 
+  select(Annotation,P21.11A,P14.E4,P21.6E) %>% 
+  filter(P21.11A>0,P14.E4>0,P21.6E>0) %>%
+  as.data.frame() %>% 
+  mutate(total = P21.11A+P14.E4+P21.6E) %>% 
+  dplyr::rename(gorilla1_P21.11A = P21.11A,
+                gorilla2_P21.6E = P21.6E,
+                mixedhost_P14.E4 = P14.E4)
+write_tsv(TableS4,file.path(outdir,'TableS4.txt'))
+```
+
+### Figure 1 columns C & D 
+Visualize function groups and sulfatase annotations convergently enriched 
+```{r}
+#inputs: annotation,gene table
+pres_abs <- read_csv(file.path(dir,'roary_nosplitparalogs/gene_presence_absence.csv'),col_types = cols())
+isblank <- function(x) {as.numeric(str_count(x, pattern = "_"))}
+gene_table <- pres_abs %>% 
+      select(Gene,all_of(metadata$isolate))  %>%
+      mutate_at(vars(-Gene),isblank) %>%
+      column_to_rownames(var = 'Gene') %>% 
+      as.matrix()
+gene_table[is.na(gene_table)] <- 0
+gene_table <- as.data.frame(gene_table) %>% rownames_to_column(var='Gene')
+
+get_func_copynumber_table <- function(list_of_func){
+  #given list of function groups returns table with gene copy numbers for each isolate
+  func_copynumber_table  <- annotation %>% 
+    left_join(gene_table,by='Gene') %>%
+    filter(func_group %in% list_of_func) %>%
+    pivot_longer(cols=metadata$isolate,
+               names_to='isolate',values_to='present') %>%
+    select(func_group,isolate,present) %>%
+    group_by(func_group,isolate) %>%
+    summarise(count = sum(present)) %>%
+    pivot_wider(names_from = func_group, values_from = count) %>% 
+    column_to_rownames(var='isolate')
+    func_copynumber_table[func_copynumber_table==0] <- NA
+  return(func_copynumber_table)
+}  
+
+mucin <- get_func_copynumber_table(c(
+                                     'COG3119@2|Bacteria_K01565_NA', 
+                                     'COG1649@2|Bacteria_K05970_NA', 
+                                     'COG5434@2|Bacteria_NA_GH110' , 
+                                     'COG3250@2|Bacteria_K01190_GH2' 
+                                   )) 
+
+mucin <- mucin %>% as.data.frame() %>%
+                                    dplyr::rename(
+                                           'N-sulfoglucosamine sulfohydrolase(K01565)'='COG3119@2|Bacteria_K01565_NA',
+                                           'sialate O-acetylesterase(K05970)'='COG1649@2|Bacteria_K05970_NA',
+                                           'alpha-1,3-galactosidase(GH110)'='COG5434@2|Bacteria_NA_GH110',
+                                           'beta-galactosidase(K01190)'='COG3250@2|Bacteria_K01190_GH2')
+
+susCD <- get_func_copynumber_table(c(
+                                     'COG1435@2|Bacteria_K21572_NA', 
+                                     'COG4206@2|Bacteria_K21573_NA'
+                                   )) 
+susCD<- susCD %>% as.data.frame() %>%
+                                    dplyr::rename('SusD family protein(K21572)' = 'COG1435@2|Bacteria_K21572_NA',
+                                                  'SusC family protein(K21573)' = 'COG4206@2|Bacteria_K21573_NA')
+                                      
+carrageenen <- get_func_copynumber_table(c('COG1874@2|Bacteria_NA_GH167','NA_NA_GH167',
+                                           '33PQM@2|Bacteria_NA_GH150','COG5434@2|Bacteria_NA_GH82')) 
+carrageenen <- carrageenen %>% as.data.frame() %>%
+                                        dplyr::rename('Lambda-carrageenase(GH150)'='33PQM@2|Bacteria_NA_GH150',
+                                               'Iota-carrageenase(GH82)'='COG5434@2|Bacteria_NA_GH82',
+                                               'GH167a'='COG1874@2|Bacteria_NA_GH167',
+                                               'GH167b'='NA_NA_GH167') %>%
+                                        mutate(beta_carrageenase=GH167a+GH167b) %>%
+                                        dplyr::rename('beta_carrageenase(GH167)'='beta_carrageenase') %>%
+                                        select(-GH167a,-GH167b)
+
+#get gene counts for each func group for all isolates 
+get_annot_copynumber_table <- function(list_of_annot){
+  #given list of function groups returns table with gene copy numbers for each isolate
+  annot_copynumber_table  <- annotation %>% 
+    left_join(gene_table,by='Gene') %>%
+    filter(Annotation %in% list_of_annot) %>%
+    pivot_longer(cols=metadata$isolate,
+               names_to='isolate',values_to='present') %>%
+    select(Annotation,isolate,present) %>%
+    group_by(Annotation,isolate) %>%
+    summarise(count = sum(present)) %>%
+    pivot_wider(names_from = Annotation, values_from = count) %>% 
+    column_to_rownames(var='isolate')
+    annot_copynumber_table[annot_copynumber_table==0] <- NA
+  return(annot_copynumber_table)
+}  
+sulfatase = get_annot_copynumber_table(c('N-acetylgalactosamine-6-O-sulfatase',
+                                         'N-acetylglucosamine-6-O-sulfatase',
+                                         'Ulvan-active sulfatase','Arylsulfatase')) 
+sulfatase = sulfatase %>% as.data.frame() %>%
+                  dplyr::rename('N-acetylgalactosamine-6-O-sulfatase(K01132)'='N-acetylgalactosamine-6-O-sulfatase',
+                         'N-acetylglucosamine-6-O-sulfatase(K01137)'='N-acetylglucosamine-6-O-sulfatase'
+                         )
+sulfa_mucin = cbind(susCD,sulfatase,mucin)   
+sulfa_mucin = sulfa_mucin[c(
+              'SusC family protein(K21573)',
+              'SusD family protein(K21572)',
+              "beta-galactosidase(K01190)",
+              "N-acetylgalactosamine-6-O-sulfatase(K01132)",
+              "N-acetylglucosamine-6-O-sulfatase(K01137)",
+              'Arylsulfatase',
+              'Ulvan-active sulfatase',
+              "sialate O-acetylesterase(K05970)",
+              "alpha-1,3-galactosidase(GH110)"
+              )]
+fig1_v5 <- gheatmap(fig1_v4,sulfa_mucin,colnames_angle=90,hjust=1,offset=.07,width=.9) + 
+    scale_fill_viridis_c(direction = -1, option="B")
+fig1_v5  <- fig1_v5 + new_scale_fill()
+(fig1_v6 <- gheatmap(fig1_v5,carrageenen,colnames_angle=90,hjust=1,offset=.13,width=.3)+ 
+    scale_fill_viridis_c(option="D",direction = -1))
+
+ggsave(fig1_v6,file = file.path(outdir,'Figure1_long.pdf'),width = 10, height=12)
+ggsave(fig1_v6,file = file.path(outdir,'Figure1_short.pdf'),width = 10, height=6)
+```
+
+### Figure S1, S2, S3
+```{r}
+
+Fig1_sup <- function(species, offset_val1, offset_val2) {
+dir = paste0('results/pangenome/',species)
+
+#read in tree
+tree_file = file.path(dir,paste0(species,'.tre'))
+tree = read.tree(tree_file)
+
+#drop outgroups from tree
+metadata_file = file.path(dir,'metadata.txt')
+metadata = read_tsv(metadata_file,col_types = cols())
+outgroup = metadata %>% filter(taxonomy_Species!=species) %>% pull(isolate)
+tree = drop.tip(tree,outgroup) 
+
+#add PIC to tree
+PI_comps_file = file.path(dir,'PI_comps.txt')
+PI_comps = read_tsv(PI_comps_file)
+PI_comps_long = PI_comps %>% 
+    mutate(compNum = 1:nrow(PI_comps)) %>% 
+    tidyr::pivot_longer(cols=c(iso1,iso2), names_to='1vs2') %>%
+    dplyr::rename('iso'='value') %>%
+    select(iso,everything())
+fig1_v1 <- ggtree(tree) %<+% PI_comps_long + 
+    geom_tippoint(aes(subset=(label%in%PI_comps_long$iso),
+                      color = factor(compNum))) +
+    geom_nodepoint(aes(subset = suppressWarnings(as.numeric(label)) > 90),size=.75) + #add bootstrap 
+    geom_treescale() #add scale
+
+#column A
+HOST_table <- metadata %>% 
+  select(isolate,host) %>%
+  column_to_rownames(var='isolate') 
+
+fig1_v2 <- gheatmap(fig1_v1 + ylim(-10,NA),colnames = FALSE,offset = offset_val1,
+    HOST_table,width=.1,colnames_angle=90,hjust=1)  + 
+    scale_fill_manual(values=get_color_palette(fig1_v1$data$label,metadata))
+
+#column B
+predicted.genes = metadata %>% select(isolate,predicted.genes) %>%
+  mutate(predicted.genes=as.numeric(predicted.genes)) %>%
+  column_to_rownames(var='isolate')
+fig1_v2 <- fig1_v2 + new_scale_fill()
+(fig1_v3 <- gheatmap(fig1_v2,predicted.genes,
+                               colnames_angle=90,hjust=1,width=.1,offset = offset_val2) + 
+    scale_fill_viridis_c(direction = -1, option="D"))
+return(fig1_v3)
+}
+
+(Fig1_Bov = Fig1_sup('Bacteroides_ovatus',0,.012))
+ggsave(Fig1_Bov,file=file.path(outdir,'FigSX_Bov.pdf'))
+(Fig1_Bfr = Fig1_sup('Bacteroides_fragilis',0,.001))
+ggsave(Fig1_Bfr,file=file.path(outdir,'FigSX_Bfr.pdf'))
+(Fig1_Bth = Fig1_sup('Bacteroides_thetaiotaomicron',0,.004))
+ggsave(Fig1_Bth,file=file.path(outdir,'FigSX_Bth.pdf'))
+```
+
+### Figure 2A
+```{r}
+Bt_metadata = 
+  read_tsv('results/pangenome/Bacteroides_xylanisolvens/metadata.txt',col_types = cols()) %>%
+  tibble::add_row(read_tsv('results/pangenome/Bacteroides_ovatus/metadata.txt',col_types = cols())) %>%
+  tibble::add_row(read_tsv('results/pangenome/Bacteroides_fragilis/metadata.txt',col_types = cols())) %>%
+  tibble::add_row(read_tsv('results/pangenome/Bacteroides_thetaiotaomicron/metadata.txt',col_types = cols())) 
+
+Bt_rep = 
+  read_tsv('results/pangenome/Bacteroides_xylanisolvens/pw_50strain.txt',col_types = cols()) %>%
+  tibble::add_row(read_tsv('results/pangenome/Bacteroides_ovatus/pw_50strain.txt',col_types = cols())) %>%
+  tibble::add_row(read_tsv('results/pangenome/Bacteroides_fragilis/pw_50strain.txt',col_types = cols())) %>%
+  tibble::add_row(read_tsv('results/pangenome/Bacteroides_thetaiotaomicron/pw_50strain.txt',col_types = cols())) 
+
+Bt_rep_metadata = Bt_metadata %>% 
+  filter(isolate %in% c(Bt_rep$iso1,Bt_rep$iso2))
+
+colors = recode(sort(unique(Bt_rep_metadata$host)),
+                          'human'='cadetblue4',
+                          'rumen' = 'brown4',
+                          'bonobo'='red2',
+                          'chimpanzee'='orange2',
+                          'orangutan'='purple4',
+                          'gorilla'='green3',
+                          'chicken'='tan',
+                          'mouse' = 'yellow2',
+                          'pig' = 'pink',
+                          'missing'='white')
+
+Figure2A = Bt_metadata %>% 
+  filter(isolate %in% c(Bt_rep$iso1,Bt_rep$iso2)) %>% 
+  ggplot(aes(x =taxonomy_Species,y=predicted.genes,fill=host)) +
+  geom_dotplot(binaxis = "y", stackdir = "centerwhole") +
+  theme_bw() +
+  scale_fill_manual(values=colors)
+
+Bt_rep = Bt_rep %>% group_by(taxonomy_Species.iso1) %>% 
+  mutate(norm_tree_dist = (tree_dist-mean(tree_dist)) /sd(tree_dist)) %>%
+  filter(norm_tree_dist<1,norm_tree_dist>-1)
+
+#compare models with quadratic and linear relationship with tree dist
+(m1 = summary(lm_robust(bray_curtis ~ I(norm_tree_dist^2) + norm_tree_dist + taxonomy_Species.iso1 + 
+                    norm_tree_dist * taxonomy_Species.iso1, data = Bt_rep)))
+
+#use linear because quad tree_dist term large, 
+(m2 = summary(lm_robust(bray_curtis ~  norm_tree_dist + taxonomy_Species.iso1 + norm_tree_dist * taxonomy_Species.iso1, 
+                       data = Bt_rep)))
+write.table(m2$coefficients,file=file.path(outdir,'Figure2_model_coef.txt'))
+
+(Figure2C = Bt_rep  %>% 
+  ggplot() + 
+  aes(x=norm_tree_dist,y=bray_curtis) +
+  geom_point(aes(color=taxonomy_Species.iso1),alpha=1,size=2) +
+  theme_bw() +
+  scale_colour_manual(values=c('red3','orange','green4','blue4')) +
+  stat_smooth(data = filter(Bt_rep ,taxonomy_Species.iso1 == 'Bacteroides_fragilis'),
+             method = "lm",color='red3', formula = y ~ x, size = 1, se=TRUE)+
+  stat_smooth(data = filter(Bt_rep ,taxonomy_Species.iso1 == 'Bacteroides_ovatus'),
+             method = "lm",color='orange', formula = y ~ x, size = 1, se=TRUE)+
+  stat_smooth(data = filter(Bt_rep ,taxonomy_Species.iso1 == 'Bacteroides_thetaiotaomicron'),
+             method = "lm",color='green4', formula = y ~ x, size = 1, se=TRUE) +
+  stat_smooth(data = filter(Bt_rep ,taxonomy_Species.iso1 == 'Bacteroides_xylanisolvens'),
+              method = "lm",color='blue4', formula = y ~  x, size = 1, se=TRUE)+
+  ylab('Pangenome distance (Bray-Curtis)')+
+  xlab('Normalized phylogenetic distance'))
+Figure2B <- get_legend(Figure2C)
+
+left = plot_grid(Figure2A+theme(axis.title.x= element_blank()),Figure2B,ncol=1,rel_heights = c(1,.5))
+Figure2 = plot_grid(left,Figure2C+theme(legend.position="none"))
+
+```
+### Figure 3 
+```{r}
+species = 'Bacteroides_xylanisolvens'
+suffix = 'window5_gp2'
+dir = file.path('results/pangenome/',species)
+summary_filename = paste0('pairwise_gene_gain_summary/',species,'_',suffix,'_summary.txt')
+summary_df = read_tsv(file.path(dir,summary_filename))
+island_filename = paste0('pairwise_gene_gain_summary/',species,'_',suffix,'_island.txt')
+island_df = read_tsv(file.path(dir,island_filename))
+
+#Panel A: tree 
+tree_file = file.path(dir,paste0(species,'.tre'))
+tree = read.tree(tree_file)
+
+PI_comps_file = file.path(dir,'PI_comps.txt')
+PI_comps = read_tsv(PI_comps_file)
+PI_comps_long = PI_comps %>% 
+    mutate(compNum = 1:nrow(PI_comps)) %>% 
+    tidyr::pivot_longer(cols=c(iso1,iso2), names_to='1vs2') %>%
+    dplyr::rename('iso'='value') %>%
+    select(iso,everything())
+tree_PI = drop.tip(tree,setdiff(tree$tip.label,PI_comps_long$iso))  
+tree_PI
+fig3_v1 <- ggtree(tree_PI ) %<+% PI_comps_long + 
+    geom_tippoint(aes(subset=(label%in%PI_comps_long$iso),
+                      color = factor(compNum))) +
+    geom_nodepoint(aes(subset = suppressWarnings(as.numeric(label)) > 90),size=.75) + #add bootstrap 
+    geom_treescale() #add scale
+
+#Panel B: Number of gene gain/loss panel
+iso1 = summary_df %>% select(iso1,iso1_gain_events,iso1_gain,iso1_loss_events,iso1_loss)
+colnames(iso1) = c('isolate','gain_events','gain_numGenes','loss_events','loss_numGenes')
+iso2 = summary_df %>% select(iso2,iso2_gain_events,iso2_gain,iso2_loss_events,iso2_loss)
+colnames(iso2) = c('isolate','gain_events','gain_numGenes','loss_events','loss_numGenes')
+df = rbind(iso1,iso2) %>% 
+  as.data.frame() %>% 
+  mutate(diff_gain_numGenes = gain_numGenes-gain_events,
+         diff_loss_numGenes = loss_numGenes-loss_events) %>%
+  select(isolate,gain_events,diff_gain_numGenes,loss_events,diff_loss_numGenes) %>%
+  pivot_longer(cols=c(gain_events,diff_gain_numGenes,loss_events,diff_loss_numGenes),
+               names_to='cat',values_to='count') %>%
+  mutate(count=as.numeric(count),cat=as.factor(cat),
+         count = ifelse(cat %in% c('loss_events','diff_loss_numGenes'),-count,count)) %>%
+  as.data.frame()
+fig3_v2 <- facet_plot(fig3_v1, panel = 'Gene Loss/Gain', data = df, 
+                geom = geom_barh, 
+                mapping = aes(x = count, fill = as.factor(cat)), 
+                stat='identity') +
+  scale_fill_manual(values=c('pink','lightblue','firebrick','blue4'))
+
+
+#Panel C: G50/L50
+iso1 = select(summary_df,iso1,iso1_G50,iso1_L50)
+colnames(iso1) <- c('isolate','G50','L50')
+iso2 = select(summary_df,iso2,iso2_G50,iso2_L50)
+colnames(iso2) <- c('isolate','G50','L50')
+G50L50 = rbind(iso1,iso2) %>% 
+  pivot_longer(cols = c('G50','L50'),values_to = 'count') %>% 
+  as.data.frame()
+fig3_v3 <- facet_plot(fig3_v2, panel = 'G50/L50', data = G50L50 , 
+                geom = geom_point, 
+                mapping = aes(x = count, color = as.factor(name)), 
+                stat='identity')
+fig3_v4 = fig3_v3  + 
+  theme_cowplot()  +
+  theme(legend.position="top")
+
+#Panels D & E event size distribution
+island_df2 = island_df  %>% 
+    separate(col=geneGainLoss,into=c('iso','gainloss'),remove=F,sep='_') %>%
+    mutate(iso_category = 
+          dplyr::if_else(iso == 'iso1',paste0(iso1,gainloss),paste0(iso2,gainloss)), 
+    size_category=cut(cluster_size, breaks=c(0,5,10,15,20,25,50,250)), 
+    size_category = recode(size_category,
+                                '(0,5]'='01-5',
+                                '(5,10]'='06-10',
+                                '(10,15]'='11-15',
+                                '(15,20]'='16-20',
+                                '(20,25]'='21-25',
+                                '(25,50]'='26-50',
+                                '(50,250]'='50-250'))
+#get total number of event/genes by size cat 
+island_df3 = island_df2 %>% 
+  group_by(iso_category,gainloss,size_category) %>%
+  summarise(number_events = n(),
+  number_genes = sum(cluster_size)) 
+#convert to proportion for each isolate 
+island_df4 = island_df3 %>% group_by(gainloss,iso_category) %>%
+         mutate(total_events = sum(number_events),
+                prop_events = number_events / total_events,
+                total_genes = sum(number_genes),
+                prop_genes = number_genes / total_genes) 
+#pivot magic, some isolates don't have events of a size category, need to put in a 0.
+island_df5 = island_df4 %>% 
+  select(iso_category,size_category,prop_events,prop_genes) %>%
+  pivot_longer(cols = c(prop_events,prop_genes), names_to = 'category', values_to = 'proportion') %>%
+  pivot_wider(names_from = size_category,values_from = proportion,values_fill = 0 ) %>%
+  pivot_longer(cols = unique(island_df4$size_category), names_to = 'size_category', values_to = 'proportion')
+island_df5$gainloss <- factor(island_df5$gainloss, levels = c('loss','gain'))
+
+#Panel D: proportion of gain/loss EVENTS by event size
+gain_loss_events_prop = island_df5  %>% 
+      filter(category=='prop_events') %>% 
+      ggplot(aes(x=size_category,y=proportion,fill=gainloss)) +
+      geom_boxplot(position=position_dodge(width = 1)) + 
+      theme_bw() +
+      xlab('Event size')+
+      scale_y_continuous(
+        name = "Proportion of events",
+        ) + 
+      theme(
+        legend.position = c(.95, .95), 
+        legend.justification = c(.95, .95)
+        ) +
+      scale_fill_manual(values = c('blue4','firebrick'))
+#Panel E: proportion of GENES gained/lost by event size
+gain_loss_gene_prop = island_df5 %>% 
+      filter(category=='prop_genes') %>% 
+      ggplot(aes(x=size_category,y=proportion,fill=gainloss)) +
+      geom_boxplot(position=position_dodge(width = .9)) + 
+      theme_bw() +
+      xlab('Event size')+
+      scale_y_continuous(
+        name = "Proportion of genes",
+        ) + 
+      theme(
+        legend.position = c(.95, .95), 
+        legend.justification = c(.95, .95)
+        ) +
+      scale_fill_manual(values = c('lightblue','pink'))
+bottom = plot_grid(gain_loss_events_prop, gain_loss_gene_prop)
+
+(Figure3 = plot_grid(fig3_v4,bottom,ncol=1))
+
+```
+
+### Duplications 
+```{r}
+dup = island_df2  %>% 
+    group_by(iso_category,gainloss,size_category,is_dup) %>%
+    summarise(number_events = n(),
+              number_genes = sum(cluster_size)) 
+
+#what fraction of gain events are duplications?
+dup %>% filter(gainloss == 'gain') %>%
+  group_by(is_dup) %>% 
+  summarize(number_events = sum(number_events)) %>%
+  mutate(proportion = number_events/sum(number_events))
+
+#what fraction of SMALL(1-5) gene gain events are duplications?
+dup %>% filter(gainloss == 'gain',size_category == '01-5') %>%
+  group_by(is_dup) %>% 
+  summarize(number_events = sum(number_events)) %>%
+  mutate(proportion = number_events/sum(number_events))
+```
+### Gain penalty of 1
+```{r}
+species = 'Bacteroides_xylanisolvens'
+suffix = 'window5_gp1'
+dir = file.path('results/pangenome/',species)
+summary_filename = paste0('pairwise_gene_gain_summary/',species,'_',suffix,'_summary.txt')
+summary_df = read_tsv(file.path(dir,summary_filename))
+
+#Panel B: Number of gene gain/loss panel
+iso1 = summary_df %>% select(iso1,iso1_gain_events,iso1_gain,iso1_loss_events,iso1_loss)
+colnames(iso1) = c('isolate','gain_events','gain_numGenes','loss_events','loss_numGenes')
+iso2 = summary_df %>% select(iso2,iso2_gain_events,iso2_gain,iso2_loss_events,iso2_loss)
+colnames(iso2) = c('isolate','gain_events','gain_numGenes','loss_events','loss_numGenes')
+df = rbind(iso1,iso2) %>% 
+  as.data.frame() %>% 
+  mutate(diff_gain_numGenes = gain_numGenes-gain_events,
+         diff_loss_numGenes = loss_numGenes-loss_events) %>%
+  select(isolate,gain_events,diff_gain_numGenes,loss_events,diff_loss_numGenes) %>%
+  pivot_longer(cols=c(gain_events,diff_gain_numGenes,loss_events,diff_loss_numGenes),
+               names_to='cat',values_to='count') %>%
+  mutate(count=as.numeric(count),cat=as.factor(cat),
+         count = ifelse(cat %in% c('loss_events','diff_loss_numGenes'),-count,count)) %>%
+  as.data.frame()
+(FigSX_gainpenalty1 <- facet_plot(fig3_v1, panel = 'Gene Loss/Gain', data = df, 
+                geom = geom_barh, 
+                mapping = aes(x = count, fill = as.factor(cat)), 
+                stat='identity') +
+  scale_fill_manual(values=c('pink','lightblue','firebrick','blue4'))+
+  theme_cowplot()  +
+  theme(legend.position="top"))
+
+ggsave(FigSX_gainpenalty1,file=file.path(outdir,'FigSX_gainpenalty1.pdf'))
+```
+
+### G50/L50 - sliding window 1 vs sl
+```{r}
+species = 'Bacteroides_xylanisolvens'
+suffix = 'window5_gp1'
+dir = file.path('results/pangenome/',species)
+summary_filename = paste0('pairwise_gene_gain_summary/',species,'_',suffix,'_summary.txt')
+window5_summary_df = read_tsv(file.path(dir,summary_filename)) %>% mutate(window = 'window5')
+suffix = 'window1_gp1'
+summary_filename = paste0('pairwise_gene_gain_summary/',species,'_',suffix,'_summary.txt')
+window1_summary_df = read_tsv(file.path(dir,summary_filename)) %>% mutate(window = 'window1')
+summary_df = window5_summary_df %>% tibble::add_row(window1_summary_df)
+
+iso1 = select(summary_df,window,iso1,iso1_G50,iso1_L50)
+colnames(iso1) <- c('window','isolate','G50','L50')
+iso2 = select(summary_df,window,iso2,iso2_G50,iso2_L50)
+colnames(iso2) <- c('window','isolate','G50','L50')
+G50L50 = rbind(iso1,iso2) %>% 
+  pivot_longer(cols = c('G50','L50'),values_to = 'count') %>% 
+  mutate(name = as.factor(name),
+         count = as.numeric(count)) %>%
+  as.data.frame()
+
+(G50L50_window1_vs_window5 = G50L50 %>% ggplot(aes(x=name,y=count,fill=window)) + 
+  geom_boxplot() +
+  theme_bw())
+ggsave(G50L50_window1_vs_window5,file=file.path(outdir,'G50L50_window1_vs_window5.pdf'))
+```
+
+```{r}
+species = 'Bacteroides_xylanisolvens'
+suffix = 'window5_gp2'
+dir = file.path('results/pangenome/',species)
+summary_filename = paste0('pairwise_gene_gain_summary/',species,'_',suffix,'_summary.txt')
+Bxy_summary_df = read_tsv(file.path(dir,summary_filename)) %>% mutate(taxonomy_Species = species)
+
+species = 'Bacteroides_ovatus'
+dir = file.path('results/pangenome/',species)
+summary_filename = paste0('pairwise_gene_gain_summary/',species,'_',suffix,'_summary.txt')
+Bov_summary_df = read_tsv(file.path(dir,summary_filename)) %>% mutate(taxonomy_Species = species)
+
+species = 'Bacteroides_fragilis'
+dir = file.path('results/pangenome/',species)
+summary_filename = paste0('pairwise_gene_gain_summary/',species,'_',suffix,'_summary.txt')
+Bfr_summary_df = read_tsv(file.path(dir,summary_filename)) %>% mutate(taxonomy_Species = species)
+
+species = 'Bacteroides_thetaiotaomicron'
+dir = file.path('results/pangenome/',species)
+summary_filename = paste0('pairwise_gene_gain_summary/',species,'_',suffix,'_summary.txt')
+Bth_summary_df = read_tsv(file.path(dir,summary_filename)) %>% mutate(taxonomy_Species = species)
+library(sjmisc)
+summary_df = Bxy_summary_df %>% 
+  sjmisc::add_rows(Bov_summary_df) %>% 
+  sjmisc::add_rows(Bfr_summary_df) %>% 
+  sjmisc::add_rows(Bth_summary_df)
+
+iso1 = select(summary_df,taxonomy_Species,iso1,iso1_G50,iso1_L50)
+colnames(iso1) <- c('taxonomy_Species','isolate','G50','L50')
+iso2 = select(summary_df,taxonomy_Species,iso2,iso2_G50,iso2_L50)
+colnames(iso2) <- c('taxonomy_Species','isolate','G50','L50')
+G50L50 = rbind(iso1,iso2) %>% 
+  pivot_longer(cols = c('G50','L50'),values_to = 'count') %>% 
+  mutate(name = as.factor(name),
+         count = as.numeric(count)) %>%
+  as.data.frame()
+
+(G50L50_Btspecies = G50L50 %>% ggplot(aes(x=taxonomy_Species,y=count,fill=name)) + 
+  geom_boxplot() +
+  theme_bw())
+ggsave(G50L50_Btspecies,file=file.path(outdir,'G50L50_Btspecies.pdf'))
+```
+
+
+### Figure 4
+```{r}
+species = 'Bacteroides_xylanisolvens'
+dir = paste0('results/pangenome/',species)
+metadata_file = file.path(dir,'metadata.txt')
+metadata = read_tsv(metadata_file,col_types = cols())
+
+#gene table
+pres_abs <- read_csv(file.path(dir,'roary_nosplitparalogs/gene_presence_absence.csv'),col_types = cols())
+isblank <- function(x) {as.numeric(str_count(x, pattern = "_"))}
+gene_table <- pres_abs %>% 
+      select(Gene,all_of(metadata$isolate))  %>%
+      mutate_at(vars(-Gene),isblank) %>%
+      column_to_rownames(var = 'Gene') %>% 
+      as.matrix()
+gene_table[is.na(gene_table)] <- 0
+gene_table <- as.data.frame(gene_table) %>% rownames_to_column(var='Gene')
+
+#generate table genes distributed across captive ape clades
+captive_clade_table <- gene_table %>% 
+  pivot_longer(cols=metadata$isolate,
+               names_to='isolate',values_to='present') %>% 
+  filter(present>0) %>%
+  left_join(select(metadata,isolate,host,human_ape,captive_clade),by='isolate') %>%
+  group_by(Gene,captive_clade) %>%
+  tally() %>%
+  pivot_wider(names_from=captive_clade,values_from=n,values_fill=0) 
+head(captive_clade_table)  
+#identify ≈ as genes present in 2 or 3 clades and fewer than 3 humans
+captive_clade_table <- captive_clade_table %>%  
+  mutate(mixedhost = as.numeric(mixedhost),
+         gorilla1 = as.numeric(gorilla1),
+         gorilla2 = as.numeric(gorilla2),
+         cladecount = sum(if_else(mixedhost>0 & (mixedhost>.5*max(captive_clade_table$mixedhost)),1,0),
+                          if_else(gorilla1>0 & (gorilla1>.5*max(captive_clade_table$gorilla1)),1,0),
+                          if_else(gorilla2>0 & (gorilla2>.5*max(captive_clade_table$gorilla2)),1,0))) %>%  
+  filter(unassigned<3,cladecount>1) 
+
+#subset gene table to captive_convergent_genes
+captive_convergent_genes <- captive_clade_table$Gene
+print(length(captive_clade_table$Gene))
+captive_gene_table <- gene_table %>% 
+  filter(Gene %in% captive_convergent_genes) %>%
+  column_to_rownames(var='Gene') %>%
+  t()
+
+saveRDS(captive_convergent_genes,file=file.path(outdir,'captive_convergent_genes.RDS'))
+
+#generate host table
+HOST_table <- metadata %>% 
+  dplyr::select(isolate,host_site) %>%
+  column_to_rownames(var='isolate') 
+
+get_color_palette <- function(tips) {
+  metadata <- metadata %>% filter(isolate %in% tips)
+  vec <- sort(unique(metadata$host_site))
+  return(recode(vec,
+                          'human_USA_Europe'='cadetblue4',
+                          'human_China' = 'deepskyblue',
+                          'rumen_USA' = 'brown4',
+                          'bonobo_Columbus_Zoo'='red2',
+                          'chimpanzee_Houston_Zoo'='orange2',
+                          'orangutan_Houston_Zoo'='purple4',
+                          'gorilla_Columbus_Zoo'='green3',
+                          'chicken_Europe'='tan',
+                          'missing_siteUnknown'='brown4'))}
+#visualize genes
+p <- gheatmap(ggtree(tree) + ylim(-10,NA),
+              HOST_table,width=.1,colnames_angle=90,hjust=1)  +
+              scale_fill_manual(values=get_color_palette(tree$tip.label)) 
+p <- p + new_scale_fill()
+(p2 <- gheatmap(p,captive_gene_table,offset=.05,colnames_angle=90,hjust=1) +
+                scale_fill_viridis_c(option="C"))
+```
+

@@ -2,8 +2,9 @@ Processing pangenome
 ================
 
 Edits metadata, filters out low quality genomes, runs prokka on genome
-assemblies, sets up files to run roary pangenome, makes phylogeny,
-generates annotations for homologous groups
+assemblies, sets up files to run roary pangenome, generates phylogeny,
+compares annotations from dbcan, sulfatlas, eggnog, and KEGG for
+homologous gene groups, runs count to assess gene gains and losses
 
 ### Merge NCBI and isolate metadata
 
@@ -35,7 +36,7 @@ BfrA_outgroup = c('GCA_016864615.1_ASM1686461v1',
 
 ``` r
 metadata <- bind_rows(strain,ncbi) %>% 
-  rename(Genome.size='Genome size',
+  dplyr::rename(Genome.size='Genome size',
          predicted.genes = "# predicted genes") %>%
   filter(taxonomy_Species%in%Bt_species|isolate%in%BfrA_outgroup) %>%
   filter(!isolate %in% MAG_samples)
@@ -383,82 +384,25 @@ reroot_phylogeny('Bacteroides_xylanisolvens')
     ## Please use `mutate()` instead.
     ## See vignette('programming') for more help
 
-![](processing_pangenome_files/figure-gfm/unnamed-chunk-5-1.png)<!-- -->
+![](processing_pangenome_files/figure-gfm/reroot_phylogeny-1.png)<!-- -->
 
 ``` r
 reroot_phylogeny('Bacteroides_fragilis')
 ```
 
-![](processing_pangenome_files/figure-gfm/unnamed-chunk-5-2.png)<!-- -->
+![](processing_pangenome_files/figure-gfm/reroot_phylogeny-2.png)<!-- -->
 
 ``` r
 reroot_phylogeny('Bacteroides_ovatus')
 ```
 
-![](processing_pangenome_files/figure-gfm/unnamed-chunk-5-3.png)<!-- -->
+![](processing_pangenome_files/figure-gfm/reroot_phylogeny-3.png)<!-- -->
 
 ``` r
 reroot_phylogeny('Bacteroides_thetaiotaomicron')
 ```
 
-![](processing_pangenome_files/figure-gfm/unnamed-chunk-5-4.png)<!-- -->
-
-``` r
-runCount <- function(species,gain_penalty) {
-  
-  dir = file.path('results/pangenome',species)
-  tree_file = file.path(dir,paste0(species,'.tre'))
-  pres_abs_file = file.path(dir,"roary_nosplitparalogs/gene_presence_absence.csv")
-  count_outdir = file.path('results/pangenome',species,'count')
-  dir.create(count_outdir)
-  
-  #add nodelabel to tree and output to count folder
-  tree <- read.tree(tree_file)
-  tree <- makeNodeLabel(tree)
-  count_tree_file = file.path(count_outdir,paste0('count_',species,'.tre'))
-  write.tree(tree,file=count_tree_file)
-  
-  #format pres abs table for count
-  pres_abs <- read_csv(pres_abs_file, col_types = cols())
-  colnames(pres_abs) <- stringr::str_replace_all(colnames(pres_abs),'[_-]','.')
-  isblank <-  function(x) {
-    gene_count = as.numeric(str_count(x, pattern = "_"))
-    gene_count = if_else(is.na(gene_count),0,gene_count)
-    }
-  pres_abs <- pres_abs %>% 
-    select(Gene,all_of(tree$tip.label))  %>% 
-    mutate_at(vars(-Gene),isblank)
-  count_pres_abs_file = file.path(count_outdir,'count_pres_abs.txt')
-  write_tsv(pres_abs,file=count_pres_abs_file)
-  
-  #run count
-  count_outfile = file.path(count_outdir,paste0('countOutput_',species,'_gainpenalty',gain_penalty))
-  print(count_outfile)
-  system(paste('java -Xmx2048M -cp bin/Count/Count.jar ca.umontreal.iro.evolution.genecontent.AsymmetricWagner -gain ',
-             gain_penalty,
-             count_tree_file,
-             count_pres_abs_file, '>',
-             count_outfile,sep=' '))
-  system(paste0("grep '# CHANGE' ",count_outfile," | sed 's/# //' > ",count_outfile,".CHANGE"))
-  system(paste0("grep '# PRESENT' ",count_outfile," | sed 's/# //' > ",count_outfile,".PRESENT"))
-  system(paste0("grep '# FAMILY' ",count_outfile," | sed 's/# //' > ",count_outfile,".FAMILY"))
-  
-  family <- read_tsv(paste0(count_outfile,".FAMILY"),col_types = cols()) %>% 
-    dplyr::rename('Gene'='name') %>%
-    select(-FAMILY)
-  write_tsv(family,paste0(count_outfile,".FAMILY"))
-  
-}
-
-runCount('Bacteroides_xylanisolvens', 1)
-runCount('Bacteroides_xylanisolvens', 2)
-runCount('Bacteroides_ovatus', 1)
-runCount('Bacteroides_ovatus', 2)
-runCount('Bacteroides_fragilis', 1)
-runCount('Bacteroides_fragilis', 2)
-runCount('Bacteroides_thetaiotaomicron', 1)
-runCount('Bacteroides_thetaiotaomicron', 2)
-```
+![](processing_pangenome_files/figure-gfm/reroot_phylogeny-4.png)<!-- -->
 
 ### Annotations for Bacteroides xylanisolvens orthologous gene groups
 
@@ -664,7 +608,7 @@ eggnog <- readr::read_tsv(
   comment = '##',
   col_types = cols())
 eggnog <- eggnog %>% 
-   rename('Gene.ID'='#query') %>% 
+   dplyr::rename('Gene.ID'='#query') %>% 
    select(Gene.ID,evalue,best_OG_cat,best_OG_name,best_OG_desc)
 colnames(eggnog) = c("Gene.ID","eggnog_evalue","eggnog_best_OG_cat","eggnog_best_OG_name","eggnog_best_OG_desc")
 head(eggnog)
@@ -878,7 +822,7 @@ host_site_color <- get_color_palette(Bxy_tree$tip.label)
   geom_treescale(x=.15,y=.25))
 ```
 
-![](processing_pangenome_files/figure-gfm/unnamed-chunk-17-1.png)<!-- -->
+![](processing_pangenome_files/figure-gfm/unnamed-chunk-15-1.png)<!-- -->
 
 ``` r
 cladeA_MCRA <- ape::getMRCA(Bxy_tree,
@@ -956,4 +900,4 @@ write_tsv(Bxy_metadata,file=file.path(dir,'metadata.txt'))
     ## Scale for 'x' is already present. Adding another scale for 'x', which will
     ## replace the existing scale.
 
-![](processing_pangenome_files/figure-gfm/unnamed-chunk-17-2.png)<!-- -->
+![](processing_pangenome_files/figure-gfm/unnamed-chunk-15-2.png)<!-- -->

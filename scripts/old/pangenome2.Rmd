@@ -1,0 +1,1024 @@
+---
+title: "Bxy strain pangenome analyses"
+output: 
+  html_document:
+    toc: true
+    toc_float: true
+---
+Generates all figures and tables
+```{r setup, include=FALSE}
+rm(list=ls())
+knitr::opts_chunk$set(echo = TRUE, message=FALSE, warning=FALSE)
+knitr::opts_knit$set(root.dir ='/stor/work/Ochman/alex/captive_ape_strain_genomes')
+library(ape)
+library(treeio)
+library(ggtree)
+library(estimatr)
+library(tidyverse)
+library(seqinr)
+library(stringr)
+library(cowplot)
+library(harrietr)
+library(vegan)
+library(ggnewscale)
+library(RColorBrewer)
+library(Biostrings)
+```
+
+#### Input files
+```{r}
+#inputs annotation, gene table, Bxy metdata,all_prot
+Bxydir = 'results/pangenome/Bacteroides_xylanisolvens'
+indir = file.path('results/analyses_input_files')
+outdir = file.path('results/output_figures_tables')
+dir.create(outdir)
+annotation = read_tsv(file= file.path(indir,'Bxy_roary_nosplitparalogs_annotation.txt'),
+                      col_types = cols())
+gene_table = read_tsv(file= file.path(indir,'Bxy_roary_nosplitparalogs_gene_table.txt'),
+                      col_types = cols())
+Bxy_metadata = read_tsv(file=file.path(indir,'Bxy_metadata.txt'),
+                      col_types = cols())
+Bxy_tree = read.tree(file = file.path(indir,'Bacteroides_xylanisolvens.tre'))
+pres_abs =  read_tsv(file= file.path(indir,'roary_nosplitparalogs_gene_presence_absence.txt'),
+                      col_types = cols())
+
+#files 
+sulfatase_prot_file = file.path(indir,'sulfatase.faa')
+OG_AAI = read_tsv(file=file.path(indir,'sulfatase_OG_AAI.txt'))
+sulfa_blastp = read_tsv(file.path(indir,'sulfatase_blastp.txt'),
+                      comment='#',col_names = FALSE, col_types = cols())
+```
+
+
+#### Kruskal-Wallis Sulftase genes 
+```{r}
+Bxy_metadata %>% 
+  group_by(clade,captive_clade,host_site) %>% 
+  tally()
+
+Bxy_metadata %>%
+  filter(clade != 'unassigned') %>% 
+  rstatix::kruskal_test(predicted.genes ~ clade) 
+```
+
+### Kruskal-Wallis Functional groups
+Identify gene function convergently enriched in strains isolated from captive apes relative to those isolated from humans in both major clades A and B 
+
+```{r}
+#output: Kruskal-Wallis table copy number difference in function groups 
+print(length(unique(annotation$func_group)))
+
+#get gene counts for each func group for all isolates 
+func <- annotation %>% 
+  left_join(gene_table,by='Gene') %>%
+  filter(!is.na(func_group)) %>%
+  pivot_longer(cols=Bxy_metadata$isolate,
+               names_to='isolate',values_to='present') %>%
+  select(func_group,func_annot,isolate,present) %>%
+  group_by(func_group,func_annot,isolate) %>%
+  summarise(count = sum(present))
+head(func)
+
+#add metadata
+func <- Bxy_metadata %>% 
+  select(isolate,host,human_ape,host_site,clade,captive_clade) %>% 
+  left_join(func,by='isolate',fill=0)
+
+#create new df that show mean gene count across all func groups in apes and humans
+func_mean <- func %>% 
+  group_by(func_group,func_annot,clade,human_ape) %>%
+  summarize(mean_count = mean(count)) %>%
+  unite(col=host_clade,c(clade,human_ape),sep='_',remove=F)  %>%
+  filter(human_ape=='human'|human_ape=='ape') %>% #subset to just captive apes and humans from clades A and B
+  filter(clade!='unassigned') %>%
+  unite(col=host_clade,c(clade,human_ape),sep='_',remove=T) %>%  
+  pivot_wider(names_from = host_clade,values_from=mean_count) %>%
+  filter(cladeA_ape != cladeA_human,cladeB_ape != cladeB_human) #some difference to observe
+#func groups tested with KW
+nrow(func_mean)
+
+#subset to just captive apes and humans from clades A and B
+func_humanape <- func %>%
+  filter(human_ape %in% c('human','ape'),clade!='unassigned')  %>%
+  unite(col=host_clade,c(clade,human_ape),sep='_',remove=F) %>%
+  filter(func_group %in% func_mean$func_group)
+
+#run kruskal wallis on functional groups
+kw = func_humanape %>%
+  filter(clade != 'cladeC') %>%
+  group_by(func_group,func_annot,clade) %>%
+  rstatix::kruskal_test(count ~ host_clade) 
+kw$p_fdr_adj = p.adjust(kw$p, method = 'fdr')
+
+#add back mean gene count info to kw results
+kw_mean <- kw %>% 
+  left_join(func_mean,by=c('func_group','func_annot')) %>%
+  mutate(ape_mean = ifelse(clade == 'cladeA', cladeA_ape, cladeB_ape))%>%
+  mutate(human_mean = ifelse(clade == 'cladeA', cladeA_human, cladeB_human)) %>%
+  mutate(diff = ape_mean-human_mean) %>%
+  select(-c(cladeA_ape, cladeB_ape,cladeA_human, cladeB_human, cladeC_human)) %>%
+  select(clade, ape_mean, human_mean, diff, everything()) 
+
+#identify func groups that are convergently enriched in captive apes
+kw_convergent = kw_mean %>% 
+  filter(p_fdr_adj < .001, ape_mean > human_mean)  %>% 
+  add_count(func_group,name='count') %>%
+  filter(count == 2) 
+nrow(kw_convergent)
+
+#label func group in table
+kw_mean = kw_mean %>% 
+  mutate(converge_captive = if_else(
+    func_group %in% kw_convergent$func_group & ape_mean > human_mean, 1, 0)) %>%
+  arrange(desc(converge_captive),desc(diff)) %>%
+  select(func_group,func_annot,clade,ape_mean,human_mean,
+         method,n,statistic,df,p,p_fdr_adj,converge_captive) %>%
+  mutate(p = round(p,3),
+         p_adj = round(p_fdr_adj,3))
+head(kw_mean)
+write_tsv(kw_mean,file=file.path(outdir,'TableS3_kw_func_groups.txt'))
+
+```
+
+### Kruskal-Wallis Sulftase genes 
+Determine whether sulfatase functions within COG3119 are enriched in Bxy strains isolated from captive apes
+```{r}
+#inputs: annotation, gene table, Bxy metdata
+#output: Kruskal-Wallis table copy number difference in sulfatase functions 
+
+#get gene counts for each func group for all isolates 
+COG3119  <- annotation %>% 
+  left_join(gene_table,by='Gene') %>%
+  filter(str_detect(eggnog_best_OG_name,'COG3119@2')) %>%
+  pivot_longer(cols=Bxy_metadata$isolate,
+               names_to='isolate',values_to='present') %>%
+  select(Annotation,isolate,present) %>%
+  group_by(Annotation,isolate) %>%
+  summarise(count = sum(present))
+head(COG3119)
+
+#add metadata
+COG3119 <- Bxy_metadata %>% 
+  select(isolate,host,human_ape,host_site,clade,captive_clade) %>% 
+  left_join(COG3119,by='isolate',fill=0)
+
+#add mean gene count across all apes and humans
+COG3119_mean <- COG3119 %>% 
+  group_by(Annotation,clade,human_ape) %>%
+  summarize(mean_count = mean(count)) %>%
+  unite(col=host_clade,c(clade,human_ape),sep='_',remove=F)  %>%
+  filter(human_ape=='human'|human_ape=='ape') %>% #subset to just captive apes and humans from clades A and B
+  filter(clade!='unassigned') %>%
+  unite(col=host_clade,c(clade,human_ape),sep='_',remove=T) %>%  
+  pivot_wider(names_from = host_clade,values_from=mean_count) %>%
+  filter(cladeA_ape != cladeA_human,cladeB_ape != cladeB_human) #some difference to observe
+head(COG3119_mean)
+
+#subset to just captive apes and humans from clades A and B
+COG3119_humanape <- COG3119 %>%
+  filter(human_ape %in% c('human','ape'),clade!='unassigned')  %>%
+  unite(col=host_clade,c(clade,human_ape),sep='_',remove=F) %>%
+  filter(Annotation %in% COG3119_mean$Annotation)
+
+#run kruskal wallis on functional groups
+kw_COG3119 = COG3119_humanape  %>%
+  filter(clade != 'cladeC') %>%
+  group_by(Annotation,clade) %>%
+  rstatix::kruskal_test(count ~ host_clade) 
+kw_COG3119$p_adj = p.adjust(kw_COG3119$p, method = 'fdr')
+
+#add back mean gene count info to kw results
+kw_COG3119_mean <- kw_COG3119 %>% 
+  left_join(COG3119_mean,by=c('Annotation')) %>%
+  mutate(ape_mean = ifelse(clade == 'cladeA', cladeA_ape, cladeB_ape))%>%
+  mutate(human_mean = ifelse(clade == 'cladeA', cladeA_human, cladeB_human)) %>%
+  mutate(diff = ape_mean-human_mean) %>%
+  select(-c(cladeA_ape, cladeB_ape,cladeA_human, cladeB_human, cladeC_human)) %>%
+  select(clade, ape_mean, human_mean, everything()) 
+
+#identify func groups that are convergently enriched in captive apes
+kw_COG3119_convergent = kw_COG3119_mean %>% 
+  filter(p_adj < .001, ape_mean > human_mean)  %>% 
+  add_count(Annotation,name='count') %>%
+  filter(count == 2) 
+
+#label func group in table
+kw_COG3119_mean = kw_COG3119_mean %>% 
+  mutate(converge_captive = if_else(
+    Annotation %in% kw_COG3119_convergent$Annotation & ape_mean > human_mean, 1, 0)) %>%
+  arrange(desc(converge_captive),desc(diff)) %>%
+  select(Annotation,clade,ape_mean,human_mean,method,n,statistic,df,p,p_adj,converge_captive) %>%
+  mutate(p = round(p,3),
+         p_adj = round(p_adj,3))
+print(kw_COG3119_mean)
+write_tsv(kw_COG3119_mean,file=file.path(outdir,'TableS4_kw_sulfatase_annotation.txt'))
+```
+
+### Figure 1
+Visualize strain host site info, # predicted genes, and copy number for gene functions related to mucin and carrageenan biosynthesis
+```{r}
+#inputs: annotation,gene table
+get_func_copynumber_table <- function(list_of_func){
+  #given list of function groups returns table with gene copy numbers for each isolate
+  func_copynumber_table  <- annotation %>% 
+    left_join(gene_table,by='Gene') %>%
+    filter(func_group %in% list_of_func) %>%
+    pivot_longer(cols=Bxy_metadata$isolate,
+               names_to='isolate',values_to='present') %>%
+    select(func_group,isolate,present) %>%
+    group_by(func_group,isolate) %>%
+    summarise(count = sum(present)) %>%
+    pivot_wider(names_from = func_group, values_from = count) %>% 
+    column_to_rownames(var='isolate')
+    func_copynumber_table[func_copynumber_table==0] <- NA
+  return(func_copynumber_table)
+}  
+
+mucin <- get_func_copynumber_table(c('COG3119@2|Bacteria_K01136_NA', 
+                                     'COG3119@2|Bacteria_K01565_NA', 
+                                     'COG1649@2|Bacteria_K05970_NA', 
+                                     'COG5434@2|Bacteria_NA_GH110' ,
+                                     'COG3525@2|Bacteria_K12373_GH20', 
+                                     'COG3250@2|Bacteria_K01195_GH2', 
+                                     'COG3250@2|Bacteria_K01190_GH2' 
+                                   )) 
+
+mucin <- mucin %>% as.data.frame() %>%
+                                    dplyr::rename('iduronate 2-sulfatase(K01136)'='COG3119@2|Bacteria_K01136_NA',
+                                           'N-sulfoglucosamine sulfohydrolase(K01565)'='COG3119@2|Bacteria_K01565_NA',
+                                           'sialate O-acetylesterase(K05970)'='COG1649@2|Bacteria_K05970_NA',
+                                           'alpha-1,3-galactosidase(GH110)'='COG5434@2|Bacteria_NA_GH110',
+                                           'hexosaminidase(K12373)'='COG3525@2|Bacteria_K12373_GH20',
+                                           'beta-glucuronidase(K01195)'='COG3250@2|Bacteria_K01195_GH2',
+                                           'beta-galactosidase(K01190)'='COG3250@2|Bacteria_K01190_GH2')
+
+carrageenen <- get_func_copynumber_table(c('COG1874@2|Bacteria_NA_GH167','NA_NA_GH167',
+                                           '33PQM@2|Bacteria_NA_GH150','COG5434@2|Bacteria_NA_GH82')) 
+carrageenen <- carrageenen %>% as.data.frame() %>%
+                                        dplyr::rename('Lambda-carrageenase(GH150)'='33PQM@2|Bacteria_NA_GH150',
+                                               'Iota-carrageenase(GH82)'='COG5434@2|Bacteria_NA_GH82',
+                                               'GH167a'='COG1874@2|Bacteria_NA_GH167',
+                                               'GH167b'='NA_NA_GH167') %>%
+                                        mutate(beta_carrageenase=GH167a+GH167b) %>%
+                                        dplyr::rename('beta_carrageenase(GH167)'='beta_carrageenase') %>%
+                                        select(-GH167a,-GH167b)
+
+get_annot_copynumber_table <- function(list_of_annot){
+  #given list of function groups returns table with gene copy numbers for each isolate
+  annot_copynumber_table  <- annotation %>% 
+    left_join(gene_table,by='Gene') %>%
+    filter(Annotation %in% list_of_annot) %>%
+    pivot_longer(cols=Bxy_metadata$isolate,
+               names_to='isolate',values_to='present') %>%
+    select(Annotation,isolate,present) %>%
+    group_by(Annotation,isolate) %>%
+    summarise(count = sum(present)) %>%
+    pivot_wider(names_from = Annotation, values_from = count) %>% 
+    column_to_rownames(var='isolate')
+    annot_copynumber_table[annot_copynumber_table==0] <- NA
+  return(annot_copynumber_table)
+}  
+sulfatase = get_annot_copynumber_table(c('N-acetylgalactosamine-6-O-sulfatase',
+                                         'N-acetylglucosamine-6-O-sulfatase',
+                                         'Ulvan-active sulfatase','Arylsulfatase')) 
+sulfatase = sulfatase %>% as.data.frame() %>%
+                  dplyr::rename('N-acetylgalactosamine-6-O-sulfatase(K01132)'='N-acetylgalactosamine-6-O-sulfatase',
+                         'N-acetylglucosamine-6-O-sulfatase(K01137)'='N-acetylglucosamine-6-O-sulfatase'
+                         )
+sulfa_mucin = cbind(sulfatase,mucin)   
+sulfa_mucin = sulfa_mucin[c("N-acetylgalactosamine-6-O-sulfatase(K01132)",
+              "N-acetylglucosamine-6-O-sulfatase(K01137)",
+              'Arylsulfatase',
+              'Ulvan-active sulfatase',
+              "sialate O-acetylesterase(K05970)",
+              "alpha-1,3-galactosidase(GH110)",
+              "hexosaminidase(K12373)",
+              "beta-glucuronidase(K01195)",
+              "beta-galactosidase(K01190)")]
+HOST_table <- Bxy_metadata %>% 
+  select(isolate,host_site) %>%
+  column_to_rownames(var='isolate') 
+
+predicted.genes = Bxy_metadata %>% select(isolate,predicted.genes) %>%
+  mutate(predicted.genes=as.numeric(predicted.genes)) %>%
+  column_to_rownames(var='isolate')
+
+#format tree
+outgroup_names <- Bxy_metadata %>% 
+  filter(taxonomy_Species!='Bacteroides_xylanisolvens') %>% 
+  pull(isolate)
+Bxy_tree <- drop.tip(Bxy_tree,outgroup_names)
+tree_v1 = ggtree(Bxy_tree) %<+% 
+  Bxy_metadata +
+  geom_nodepoint(aes(subset = suppressWarnings(as.numeric(label)) > 90),size=.75) +
+  geom_treescale()
+
+cladeA_MCRA <- ape::getMRCA(Bxy_tree,Bxy_metadata$isolate[Bxy_metadata$clade=='cladeA'])
+cladeB_MCRA <- ape::getMRCA(Bxy_tree,Bxy_metadata$isolate[Bxy_metadata$clade=='cladeB'])
+cladeC_MCRA <- ape::getMRCA(Bxy_tree,Bxy_metadata$isolate[Bxy_metadata$clade=='cladeC'])
+mixedhostNode <- ape::getMRCA(Bxy_tree,Bxy_metadata$isolate[Bxy_metadata$captive_clade=='mixedhost'])
+gorilla1Node <- ape::getMRCA(Bxy_tree,Bxy_metadata$isolate[Bxy_metadata$captive_clade=='gorilla1'])
+gorilla2Node <- ape::getMRCA(Bxy_tree,Bxy_metadata$isolate[Bxy_metadata$captive_clade=='gorilla2'])
+tree_v2 = tree_v1 + #add clade labels
+   geom_cladelabel(node=cladeA_MCRA,label="cladeA",offset = .005)+
+   geom_cladelabel(node=cladeB_MCRA,label="cladeB",offset = .005)+
+   geom_cladelabel(node=cladeC_MCRA,label="cladeC",offset = .005)+
+   geom_cladelabel(node=mixedhostNode,label="mixedhost",offset = .01) +
+   geom_cladelabel(node=gorilla1Node,label="gorilla1",offset = .01)+ 
+   geom_cladelabel(node=gorilla2Node,label="gorilla2",offset = .01) +
+   geom_tippoint(aes(subset=(label=='GCA.000210075.1.ASM21007v1')),color='red') +
+   xlim(NA,.25)
+
+get_color_palette <- function(tips) {
+  Bxy_metadata <- Bxy_metadata %>% filter(isolate %in% tips)
+  vec <- sort(unique(Bxy_metadata$host_site))
+  return(recode(vec,
+                          'human_USA_Europe'='cadetblue4',
+                          'human_China' = 'deepskyblue',
+                          'rumen_USA' = 'brown4',
+                          'bonobo_Columbus_Zoo'='red2',
+                          'chimpanzee_Houston_Zoo'='orange2',
+                          'orangutan_Houston_Zoo'='purple4',
+                          'gorilla_Columbus_Zoo'='green3',
+                          'chicken_Europe'='tan',
+                          'missing_siteUnknown'='brown4'))}
+
+p <- gheatmap(tree_v2 + ylim(-10,NA),
+    HOST_table,width=.1,colnames_angle=90,hjust=1,offset=.05)  + 
+    scale_fill_manual(values=get_color_palette(Bxy_tree$tip.label))
+p <- p + new_scale_fill()
+p1b <- gheatmap(p,predicted.genes,colnames_angle=90,hjust=1,offset=.06,width=.1) + 
+    scale_fill_viridis_c(direction = -1, option="D")
+p1b <- p1b + new_scale_fill()
+p2 <- gheatmap(p1b,sulfa_mucin,colnames_angle=90,hjust=1,offset=.07,width=.9) + 
+    scale_fill_viridis_c(direction = -1, option="B")
+p2 <- p2 + new_scale_fill()
+(p3 <- gheatmap(p2,carrageenen,colnames_angle=90,hjust=1,offset=.13,width=.3)+ 
+    scale_fill_viridis_c(option="D",direction = -1))
+ggsave(p3,file = file.path(outdir,'Figure1_long.pdf'),width = 10, height=12)
+ggsave(p3,file = file.path(outdir,'Figure1_short.pdf'),width = 10, height=6)
+```
+
+### Figure 2
+Compare distribution of sulfatase genes in XB1A model to strains isolated from captive apes
+```{r}
+#filter to orthologous genes that are within the sulfatlas
+sulfatase_genes <- annotation %>% 
+  filter(str_detect(eggnog_best_OG_name,'COG3119@2'),
+         Gene != 'pafA', #Gene doesn't align well
+         Gene!= 'group_4698', #Gene doesn't align well
+         No..isolates > 5
+         )  #remove single gene group 
+### make tree of sulfa genes
+set.seed(131)
+sulfatase_prot_file = file.path(indir,'sulfatase.faa')
+
+###subset from all protein seqs to only sulfatase genes in captive ape strains
+#all_prot file not uploaded to github showing how sulftase.faa was generated
+#all_prot_file = file.path(indir,'all_prot.faa') 
+#all_prot = readAAStringSet(all_prot_file)
+#names(all_prot) <- sapply(strsplit(names(all_prot)," "), `[`, 1)
+#sulfatase_prot = all_prot[names(all_prot) %in% sulfatase_genes$Gene.ID] 
+#writeXStringSet(sulfatase_prot,sulfatase_prot_file)
+
+#system(paste0('mafft --auto ',sulfatase_prot_file,' > ',sulfatase_prot_file,'.align'))
+#system(paste0('fasttree ',sulfatase_prot_file,'.align > ',sulfatase_prot_file,'.tree'))
+  
+present_in_isolates <- function(list_of_genes,list_of_isolates,name) {
+  #given list of genes and isolates, determine the total number of genes present in isolates
+  isolate_gene_table <- annotation %>% 
+    left_join(gene_table,by='Gene') %>%
+    filter(Gene %in% list_of_genes) %>%
+    select(Gene,list_of_isolates) %>%
+    mutate(total = rowSums(select_(., "-Gene"))) %>%
+    select(Gene,total) 
+    
+  isolate_gene_table = isolate_gene_table %>%
+         mutate(binary = ifelse(total>0,name,NA)) %>%
+         column_to_rownames('Gene')
+  colnames(isolate_gene_table) <-c(paste0(name,'_total'),name)
+  return(isolate_gene_table)
+}
+
+#determine which of the sulfatase_genes are present in XBA1 and captive ape lineages
+mixedhost_cladeA =  Bxy_metadata %>% filter(captive_clade=='mixedhost') %>% pull(isolate)
+mixedhost_cladeA = present_in_isolates(sulfatase_genes$Gene,mixedhost_cladeA,'mixedhost_cladeA')
+gorilla1_cladeA =  Bxy_metadata %>% filter(captive_clade=='gorilla1') %>% pull(isolate)
+gorilla1_cladeA = present_in_isolates(sulfatase_genes$Gene,gorilla1_cladeA,'gorilla1_cladeA')
+gorilla2_cladeB =  Bxy_metadata %>% filter(captive_clade=='gorilla2') %>% pull(isolate)
+gorilla2_cladeB = present_in_isolates(sulfatase_genes$Gene,gorilla2_cladeB,'gorilla2_cladeB')
+human_cladeA =  Bxy_metadata %>% filter(clade=='cladeA',host=='human') %>% pull(isolate)
+human_cladeA = present_in_isolates(sulfatase_genes$Gene,human_cladeA,'human_cladeA')
+human_cladeB =  Bxy_metadata %>% filter(clade=='cladeB',host=='human') %>% pull(isolate)
+human_cladeB = present_in_isolates(sulfatase_genes$Gene,human_cladeB,'human_cladeB')
+human_cladeC =  Bxy_metadata %>% filter(clade=='cladeC',host=='human') %>% pull(isolate)
+human_cladeC = present_in_isolates(sulfatase_genes$Gene,human_cladeC,'human_cladeC')
+
+pres <- cbind(mixedhost_cladeA,gorilla1_cladeA,gorilla2_cladeB,human_cladeA,human_cladeB,human_cladeC) 
+pres = pres %>% select(!contains('total')) 
+#remove sulfastase group only present in outgroup Bxy strains
+pres = pres[rowSums(is.na(pres)) != ncol(pres), ]
+#total number of sulfatase groups
+nrow(pres)
+#total number of sulfatase groups
+core = pres[rowSums(!is.na(pres)) == ncol(pres), ]
+nrow(core)
+#captive only number of sulfatase groups
+captive_only = pres %>% filter(is.na(human_cladeC),is.na(human_cladeB),is.na(human_cladeA))
+captive_only %>% group_by_all() %>% tally()
+#human only number of sulfatase groups
+human_only = pres %>% filter(is.na(mixedhost_cladeA),is.na(gorilla1_cladeA),is.na(gorilla2_cladeB))
+human_only %>% group_by_all() %>% tally()
+#mixedhost_cladeA number of sulfatase groups
+pres %>% filter(!is.na(mixedhost_cladeA)) %>% nrow()
+#gorilla1_cladeA number of sulfatase groups
+pres %>% filter(!is.na(gorilla1_cladeA)) %>% nrow()
+#gorilla2_cladeB number of sulfatase groups
+pres %>% filter(!is.na(gorilla2_cladeB)) %>% nrow()
+#human_cladeA number of sulfatase groups
+pres %>% filter(!is.na(human_cladeA)) %>% nrow()
+#human_cladeB number of sulfatase groups
+pres %>% filter(!is.na(human_cladeB)) %>% nrow()
+#human_cladeC number of sulfatase groups
+pres %>% filter(!is.na(human_cladeC)) %>% nrow()
+
+sulfadata  <- pres %>%
+  rownames_to_column(var='Gene')%>%
+  left_join(annotation,by='Gene') 
+
+#reorder pres abs table
+pres = pres[c('human_cladeC','human_cladeB','gorilla2_cladeB',
+              'human_cladeA','mixedhost_cladeA','gorilla1_cladeA')]
+
+#label tree tips with sulfatase gene ortholog
+sulfa_tree <- read.tree(paste0(sulfatase_prot_file,'.tree')) #read in tree
+get_group <- function(prot){sulfadata$Gene[sulfadata$Gene.ID == prot]}
+sulfa_tree$tip.label <- as.character(lapply(sulfa_tree$tip.label,get_group))
+sulfa_tree <- keep.tip(sulfa_tree,rownames(pres)) #remove tips not in dataframe
+
+#format table for display with ggtree
+#annotated function
+func <- sulfadata %>% 
+  dplyr::select(Gene,Annotation) %>% 
+  column_to_rownames(var='Gene') %>% as.matrix() 
+#sulfatase subfamily
+subfamily <- sulfadata %>% 
+  dplyr::select(Gene,sulfatlas_subfamily) %>% 
+  filter(Gene %in% sulfa_tree$tip.label) %>% 
+  mutate(sulfatase_subfamily = as.character(sulfatlas_subfamily)) %>%
+  column_to_rownames(var='Gene') %>% as.matrix() 
+colourCount = length(unique(subfamily[,'sulfatlas_subfamily'])) #increase color palette
+subfamily_pal = colorRampPalette(brewer.pal(colourCount, "Paired"))(colourCount)
+
+#identify sulfatase genes only present in captive ape clades
+coregenes = rownames(pres)[rowSums(!is.na(pres)) == ncol(pres)]
+
+#build sulfatase tree
+sulfa_tree_gg = ggtree(sulfa_tree,layout='circular') +
+  geom_point2(aes(subset=(label%in%coregenes)), 
+              shape=21, size=1, fill='black') + 
+  geom_treescale() 
+
+#determine internal tree nodes for sulfatase subfamilies
+got_subfam_node <- function(sub){
+  subfam = sulfadata$Gene[sulfadata$sulfatlas_subfamily==sub]
+  subfam = intersect(subfam,sulfa_tree$tip.label)
+  subfam_node = getMRCA(sulfa_tree,subfam)
+  return(subfam_node)
+}
+#got_subfam_node(15)
+
+#number of orthologous gene groups per sulfatase subfamily
+table(sulfadata$sulfatlas_subfamily)
+nodes = lapply(unique(sulfadata$sulfatlas_subfamily),got_subfam_node)
+names(nodes) = unique(sulfadata$sulfatlas_subfamily)
+unlist(nodes) #subfamily & node
+#singleton subfamilies with 1 rep
+singleton_S1 = names(table(sulfadata$sulfatlas_subfamily))[table(sulfadata$sulfatlas_subfamily)==1]
+singleton_S1 = sulfadata %>% filter(sulfatlas_subfamily %in% singleton_S1) 
+#groups with unassigned subfamilies
+unassigned_S1 = sulfadata %>% filter(is.na(sulfatlas_subfamily))
+nrow(unassigned_S1)
+#unassigned_S1_prot = all_prot[names(all_prot) %in% unassigned_S1$Gene.ID] 
+#unassigned_S1_prot_file = file.path(indir,'sulfatase_S1_unassigned.faa')
+#writeXStringSet(unassigned_S1_prot,unassigned_S1_prot_file)
+
+#add sulfatase subfamilies to tree
+sulfa_tree_gg_v2 = sulfa_tree_gg +
+  geom_hilight(node=153, fill="darkgreen", alpha=.1) + 
+  geom_cladelabel(node=153,label="S1_15") +  
+  geom_hilight(node=114, fill="darkgreen", alpha=.1) + 
+  geom_cladelabel(node=114,label="S1_27") +  
+  geom_hilight(node=108, fill="blue", alpha=.1) +
+  geom_cladelabel(node=108,label="S1_9") +  
+  geom_hilight(node=149, fill="red", alpha=.1) +
+  geom_cladelabel(node=149,label="S1_20") +  
+  geom_hilight(node=118, fill="orange", alpha=.1) +
+  geom_cladelabel(node=118,label="S1_11") +
+  geom_hilight(node=105, fill="yellow", alpha=.1) + 
+  geom_cladelabel(node=105,label="S1_67") +  
+  geom_hilight(node=143, fill="purple", alpha=.1) +
+  geom_cladelabel(node=143,label="S1_4") +  
+  geom_hilight(node=133, fill="blue4", alpha=.1) +
+  geom_cladelabel(node=133,label="S1_14") +  
+  geom_hilight(node=163, fill="pink", alpha=.1) +
+  geom_cladelabel(node=163,label="S1_8") +
+  geom_hilight(node=160, fill="darkorange", alpha=.1) +
+  geom_cladelabel(node=160,label="S1_22") +  
+  geom_hilight(node=138, fill="green", alpha=.1) +
+  geom_cladelabel(node=138,label="S1_16") +  
+  geom_hilight(node=112, fill="red2", alpha=.1) +
+  geom_cladelabel(node=112,label="S1_30") +  
+  geom_hilight(node=180, fill="yellow4", alpha=.1) +
+  geom_cladelabel(node=180,label="S1_28") + 
+  geom_treescale() 
+
+sulfa_tree_gg_v3 = sulfa_tree_gg_v2 %<+% sulfadata + xlim(NA, 5) +
+    geom_tiplab(aes(label=sulfatlas_subfamily, subset=(label%in%singleton_S1$Gene)), parse=T) +
+    geom_tippoint(aes(label=sulfatlas_subfamily, subset=(label%in%singleton_S1$Gene)),fill = 'blue',shape=23,parse=T)
+sulfa_tree_gg_v3
+color_vec <- recode(sort(colnames(pres)),
+      "gorilla1_cladeA"="#1B9E77", #darkgreen
+      "mixedhost_cladeA"="#7570B3", #purple
+      "gorilla2_cladeB" = "#D95F02", #orange 
+      "human_cladeA" = 'dodgerblue4',
+      "human_cladeB"= "#E6AB02",
+      "human_cladeC"='brown')
+
+p <- gheatmap(sulfa_tree_gg_v3,pres,colnames_angle=90,hjust=1,width=.4)  + 
+  scale_fill_manual(values=color_vec) 
+p <- p + new_scale_fill()
+(p2 <- gheatmap(p,func,colnames_angle=90,hjust=1,offset=1,width=.05) +
+    scale_fill_manual(values = brewer.pal(15, "Paired")))
+ggsave(p2,file=file.path(outdir,'Figure2_sulfatase_circle.pdf'),height=12,width=10)
+
+```
+
+#### Determine AAI within orthologous genes 
+Shows leg work behind how AAI is calculated, requires all_prot.faa generated from processing_pangenome
+final table with AAI among sulfatase genes is uploaded 
+```{r echo=TRUE, message=FALSE, warning=FALSE}
+AAI_outdir = file.path(Bxydir,'gene_AAI')
+dir.create(AAI_outdir)
+
+get_ave_AAI <- function(gene){
+  #given a orthologous gene extracts faa of all seqs, performs alignment,
+  #writes matrix of AAI among seqs
+  GeneIDs <- pres_abs %>% filter(Gene==gene) %>% select(Bxy_metadata$isolate) %>% as.character()
+  GeneIDs <- unlist(strsplit(GeneIDs, "[\t]"))
+  GeneIDs = GeneIDs[!is.na(GeneIDs)]
+  GeneID_seqs = all_prot[names(all_prot) %in% GeneIDs]
+  print(paste(gene,length(GeneID_seqs)))
+  if (length(GeneID_seqs)>1){
+    file = file.path(AAI_outdir,paste0(gene,'.faa'))
+    writeXStringSet(GeneID_seqs,file)
+    system(paste0('mafft --auto ',file,' > ',file,'.align'))
+    prot_align = read.alignment(file=paste0(file,'.align'),format='fasta')
+    dist = dist.alignment(prot_align,"identity")
+    dist = as.matrix(dist)
+    dist[lower.tri(dist,diag = TRUE)] <- NA
+    dist = 1-dist
+    dist_file = file.path(AAI_outdir,paste0(gene,'_dist.txt'))
+    write_tsv(as.data.frame(dist),file=dist_file)
+    ave_AAI = mean(dist,na.rm=TRUE)*100
+    return(c(gene,ave_AAI))}
+  else {
+    return(NA)}}
+#get_ave_AAI(gene = "group_683") 
+
+get_AAI_from_dist <- function(gene){
+   #given gene reads dist matrix and 
+   #return average amino acid identity 
+   dist_file = file.path(AAI_outdir,paste0(gene,'_dist.txt'))
+   dist = as.matrix(read_tsv(file=dist_file),col_types=cols())
+   ave_AAI = mean(dist,na.rm=TRUE)*100
+   return(data.frame(gene,ave_AAI))
+}
+#get_AAI_from_dist(gene = "group_683") 
+
+
+#completed = list.files(AAI_outdir,pattern = '_dist.txt')
+#completed = unique(sapply(str_split(completed,'_dist'), `[`, 1))
+#sulfatase_to_do = setdiff(sulfatase_genes$Gene,completed)
+#mclapply(sulfatase_to_do,get_ave_AAI,mc.cores=20)
+#sulfatase_OG_AAI = lapply(sulfatase_genes$Gene,get_AAI_from_dist) %>% bind_rows()
+#write_tsv(sulfatase_OG_AAI,file=file.path(indir,'sulfatase_OG_AAI.txt'))
+
+sulfatase_OG_AAI = read_tsv(file=file.path(indir,'sulfatase_OG_AAI.txt'))
+#summary(sulfatase_OG_AAI$ave_AAI)
+```
+
+
+#### blastp of sulfatase genes to sulfatlas
+requires download of sulfatlas as show in processing_pangenome, blastp results uploads
+```{bash}
+#blastp -query results/analyses_input_files/sulfatase.faa -db results/pangenome/Bacteroides_xylanisolvens/sulfatlas/sulfatlas_v1.3.faa -qcov_hsp_perc 80 -outfmt "6 qseqid sseqid salltitles pident evalue" -out results/analyses_input_files/sulfatase_blastp.txt
+```
+
+```{r echo=TRUE, message=FALSE, warning=FALSE}
+#read in blast results
+sulfa_blastp = read_tsv(file.path(indir,'sulfatase_blastp.txt'),
+                      comment='#',col_names = FALSE, col_types = cols())
+
+colnames(sulfa_blastp) <- c('Gene.ID', 'sseqid','salltitles', 'pident', 'evalue_sulfa')
+sulfa_blastp <- sulfa_blastp %>%
+  #mutate(Gene.ID=str_sub(Gene.ID, end=-3)) %>% 
+  filter(pident > 85) %>% 
+  separate(col = 'salltitles',into=c(NA,'id','full_descripton'),extra='drop',sep='[|]') %>%
+  separate(col='id',into=c('lcl','sulfatase_family','sulfatase_subfamily'),sep='_') %>%
+  separate(col='full_descripton',into=c('description','species'),sep='OS=') %>%
+  separate(col='description',into=c('front','description'),sep='BACE |BACOV |BACO1 |_BACSE ')  %>%
+  separate(col='species',into=c('species',NA),sep='OX=') %>% 
+  separate(col='species',into=c('Genus','species'),sep=' ') %>% 
+  mutate(Genus_sp = paste(Genus,species,sep='_')) %>%
+  select('Gene.ID', 'sseqid','pident', 'evalue_sulfa',
+                  'sulfatase_family','sulfatase_subfamily','description','Genus_sp') 
+
+#get best blastp for each Bacteroides species 
+sulfa_blastp <- sulfa_blastp %>% 
+  select(Gene.ID,Genus_sp,pident) %>% 
+  distinct() %>%  
+  group_by(Gene.ID,Genus_sp) %>%
+     slice_max(order_by=pident,n = 1) %>%
+     as.data.frame() %>%
+  pivot_wider(names_from=Genus_sp,values_from=pident,values_fill=NA)
+head(sulfa_blastp)
+
+#combine with AAI results
+table_sulfadata_captive = sulfadata %>% 
+  select(Gene,Gene.ID,Annotation,sulfatlas_subfamily,mixedhost_cladeA,gorilla1_cladeA,gorilla2_cladeB,human_cladeA,human_cladeB,human_cladeC)  %>%
+  left_join(sulfatase_OG_AAI,by=c('Gene'='gene')) %>% 
+  left_join(sulfa_blastp,by=c('Gene.ID')) %>%
+  select(Gene:ave_AAI,Bacteroides_xylanisolvens,Bacteroides_ovatus,Bacteroides_thetaiotaomicron,
+         Bacteroides_finegoldii,Bacteroides_caecimuris,Bacteroides_faecis,
+         gut_metagenome,Parabacteroides_merdae,everything()) 
+
+#get max pident for other Bacteroides species
+Bt_sp = table_sulfadata_captive %>%
+  select(Bacteroides_sp.:Bacteroides_uniformis) %>% 
+  replace(is.na(.), 0)  %>% 
+  mutate_all(as.numeric) %>% 
+  rowwise() %>% 
+  summarize(max = max(c_across(),na.rm=T)) %>%
+  pull(max)
+
+table_sulfadata_captive = table_sulfadata_captive %>% 
+  select(Gene:ave_AAI,Bacteroides_xylanisolvens,Bacteroides_ovatus,Bacteroides_thetaiotaomicron,
+         Bacteroides_finegoldii,Bacteroides_caecimuris,Bacteroides_faecis,
+         gut_metagenome,Parabacteroides_merdae)
+table_sulfadata_captive$Bt_sp = Bt_sp
+write_tsv(table_sulfadata_captive,file.path(outdir,'TableS5_sulfatase_blastp.txt'))
+head(table_sulfadata_captive)
+```
+
+### Figure 3
+```{r}
+#generate table genes distributed across captive ape clades
+captive_clade_table <- gene_table %>% 
+  pivot_longer(cols=Bxy_metadata$isolate,
+               names_to='isolate',values_to='present') %>% 
+  filter(present>0) %>%
+  left_join(select(Bxy_metadata,isolate,host,human_ape,captive_clade),by='isolate') %>%
+  group_by(Gene,captive_clade) %>%
+  tally() %>%
+  pivot_wider(names_from=captive_clade,values_from=n,values_fill=0) 
+head(captive_clade_table)  
+#identify ≈ as genes present in 2 or 3 clades and fewer than 3 humans
+captive_clade_table <- captive_clade_table %>%  
+  mutate(mixedhost = as.numeric(mixedhost),
+         gorilla1 = as.numeric(gorilla1),
+         gorilla2 = as.numeric(gorilla2),
+         cladecount = sum(if_else(mixedhost>0 & (mixedhost>.5*max(captive_clade_table$mixedhost)),1,0),
+                          if_else(gorilla1>0 & (gorilla1>.5*max(captive_clade_table$gorilla1)),1,0),
+                          if_else(gorilla2>0 & (gorilla2>.5*max(captive_clade_table$gorilla2)),1,0))) %>%  
+  filter(unassigned<3,cladecount>1) 
+
+#subset gene table to captive_convergent_genes
+captive_convergent_genes <- captive_clade_table$Gene
+print(length(captive_clade_table$Gene))
+captive_gene_table <- gene_table %>% 
+  filter(Gene %in% captive_convergent_genes) %>%
+  column_to_rownames(var='Gene') %>%
+  t()
+
+saveRDS(captive_convergent_genes,file=file.path(indir,'captive_convergent_genes.RDS'))
+#generate host table
+HOST_table <- Bxy_metadata %>% 
+  dplyr::select(isolate,host_site) %>%
+  column_to_rownames(var='isolate') 
+
+get_color_palette <- function(tips) {
+  Bxy_metadata <- Bxy_metadata %>% filter(isolate %in% tips)
+  vec <- sort(unique(Bxy_metadata$host_site))
+  return(recode(vec,
+                          'human_USA_Europe'='cadetblue4',
+                          'human_China' = 'deepskyblue',
+                          'rumen_USA' = 'brown4',
+                          'bonobo_Columbus_Zoo'='red2',
+                          'chimpanzee_Houston_Zoo'='orange2',
+                          'orangutan_Houston_Zoo'='purple4',
+                          'gorilla_Columbus_Zoo'='green3',
+                          'chicken_Europe'='tan',
+                          'missing_siteUnknown'='brown4'))}
+#visualize genes
+p <- gheatmap(ggtree(Bxy_tree) + ylim(-10,NA),
+              HOST_table,width=.1,colnames_angle=90,hjust=1)  +
+              scale_fill_manual(values=get_color_palette(Bxy_tree$tip.label)) 
+p <- p + new_scale_fill()
+(p2 <- gheatmap(p,captive_gene_table,offset=.05,colnames_angle=90,hjust=1) +
+                scale_fill_viridis_c(option="C"))
+
+p2
+```
+#### See script Figure3_output_fna  
+
+
+### Figure 4
+```{r}
+list.files(file.path(indir,'pairwise_gene_islands'))
+
+Bxy = read_tsv(
+  file.path(indir,'pairwise_gene_islands','Bacteroides_xylanisolvens_summary.txt'),
+  col_types = cols())
+Bov = read_tsv(
+  file.path(indir,'pairwise_gene_islands','Bacteroides_ovatus_summary.txt'),
+  col_types = cols())
+Bfr = read_tsv(
+  file.path(indir,'pairwise_gene_islands','Bacteroides_fragilis_summary.txt'),
+  col_types = cols())
+Bth = read_tsv(
+  file.path(indir,'pairwise_gene_islands','Bacteroides_thetaiotaomicron_summary.txt'),
+  col_types = cols())
+colnames(Bxy)
+
+function_plot_pangenome <- function(df){
+  #visualize relationship between tree dist and pangenome distance, number of events, number of gene differences, and mean island size
+#A) Pangenome dist
+(pangenome_bray = ggplot(df,aes(x=tree_dist,y=dist_bray)) + 
+  geom_point(color='blue4',size=3) + 
+  theme_bw() +
+  stat_smooth(data = df, method = "lm", color = 'blue4',formula = y ~ x + I(x^2), size = 1) +
+  ylab('Pangenome distance (Bray-Curtis)') +
+  xlab('Phylogenetic distance'))
+
+#B) Events
+(events = ggplot(df,aes(x=tree_dist)) + 
+  geom_point(aes(y=n_gene_diff_bray),color='blue4',size=3) + 
+  stat_smooth(aes(y=n_gene_diff_bray), 
+      method = "lm", color = 'blue4',formula = y ~ I(x^2) + x, size = 1) +
+  geom_point(aes(y=n_events_bray),color='yellow3',size=3)   +
+  stat_smooth(aes(y=n_events_bray), 
+      method = "lm", color = 'yellow3',formula =  y ~ x, size = 1) +
+  theme_bw() +
+  scale_y_continuous(
+  name = "Number of gene differences",
+  sec.axis = sec_axis( trans=~., name="Number of events")
+  ) +
+  xlab('Phylogenetic distance'))
+
+## C) island size 
+(island_size = ggplot(df,aes(x=tree_dist,y=mean_size_events_bray)) + 
+  geom_point(color='blue4',size=3) + 
+  stat_smooth(method = "lm", color = 'blue4',formula = y ~ x, size = 1) +
+  theme_bw() +
+  ylab('Average event size') +
+  xlab('Phylogenetic distance')
+  )
+fig = plot_grid(pangenome_bray,events,island_size,nrow=1,labels=c("A","B","C"),rel_widths = c(1,1.2,1))
+return(fig)  
+}
+
+(Bxy_plot = function_plot_pangenome(Bxy))
+ggsave(Bxy_plot,file=file.path(outdir,'Figure4_gene_content_evolution.pdf'),width=12,height=4)
+Bov_plot = function_plot_pangenome(Bov)
+Bfr_plot = function_plot_pangenome(Bfr)
+Bth_plot = function_plot_pangenome(Bth)
+(Bt_other = plot_grid(Bov_plot,Bfr_plot,Bth_plot,ncol=1))
+ggsave(Bt_other,file=file.path(outdir,'FigureS2_gene_content_evolution.pdf'),height=15,width=10)
+df = Bxy
+value='dist_bray'
+run_mantel_tests <- function(df,value) {
+  #run mantel test between tree distance and given variable
+  tree_dist_M = df %>% select(iso1,iso2,tree_dist) %>%
+    pivot_wider(names_from=iso2,values_from=tree_dist) %>% 
+    column_to_rownames('iso1') %>% as.matrix()
+  value_dist_M = df %>% select(iso1,iso2,!!value) %>% 
+    pivot_wider(names_from=iso2,values_from=!!value) %>% 
+    column_to_rownames('iso1') %>% as.matrix() 
+  mantel.res = mantel(tree_dist_M, value_dist_M, method = "spearman", permutations = 9999, na.rm = TRUE)
+  return(mantel.res)
+
+}  
+
+
+run_mantel_test = function(df,species_name) {
+  df_mantel = as.data.frame(rbind(
+      run_mantel_tests(df,value='dist_bray'),
+      run_mantel_tests(df,value='n_gene_diff_bray'),
+      run_mantel_tests(df,value='n_events_bray'),
+      run_mantel_tests(df,value='mean_size_events_bray')))
+  df_mantel = df_mantel %>%
+    mutate(name=value,
+           species=species_name,
+           statistic=round(as.numeric(statistic),3)) %>% 
+    select(species,name,method,permutations,statistic,signif) %>%
+    dplyr::rename('pval'='signif') 
+  df_mantel$pval_fdr_adj = p.adjust(df_mantel$pval, method = 'fdr')
+  return(df_mantel)
+}
+
+#Bacteroides_xylanisolvens
+(Bxy_mantel = run_mantel_test(Bxy,'Bacteroides_xylanisolvens'))
+#BBacteroides_ovatus
+(Bov_mantel = run_mantel_test(Bov,'Bacteroides_ovatus')) 
+#Bacteroides_thetaiotaomicron
+(Bth_mantel = run_mantel_test(Bth,'Bacteroides_thetaiotaomicron')) 
+#Bacteroides_fragilis
+(Bfr_mantel = run_mantel_test(Bfr,'Bacteroides_fragilis'))
+```
+
+### Figure 6A 
+Compare pangenome genome content differences among Bacteroides species
+```{r}
+#use normalized tree dist (tree_dist-mean(tree_dist))/sd(tree_dist) to compare across Bt species
+#subset to overlapping tree dist within 2sd of means
+Bac = Bxy %>% add_row(Bov) %>% add_row(Bfr) %>% add_row(Bth) %>% 
+  filter(tree_dist_norm>-1.5,tree_dist_norm<1.5)
+
+#compare models with quadratic and linear relationship with tree dist
+m1 = summary(lm_robust(dist_bray ~ I(tree_dist_norm^2) + tree_dist_norm + taxonomy_Species.iso1 + 
+                    tree_dist_norm * taxonomy_Species.iso1, data = Bac))
+m1$coefficients
+#use linear because quad tree_dist term large, 
+m2 = summary(lm_robust(dist_bray ~  tree_dist_norm + taxonomy_Species.iso1 + tree_dist_norm * taxonomy_Species.iso1, data = Bac))
+write.table(m2$coefficients,file=file.path(outdir,'Figure6_Bacteroides_pangenome_model_coef.txt'))
+m2$coefficients
+
+(Bt_pangenome = Bac %>% 
+  ggplot() + 
+  aes(x=tree_dist_norm,y=dist_bray) +
+  geom_point(aes(color=taxonomy_Species.iso1),alpha=1,size=2) +
+  theme_bw()  + 
+  scale_colour_manual(values=c('red3','orange','green4','blue4')) +
+  stat_smooth(data = filter(Bac,taxonomy_Species.iso1 == 'Bacteroides_fragilis'),
+             method = "lm",color='red3', formula = y ~ x, size = 1, se=TRUE)+
+  stat_smooth(data = filter(Bac,taxonomy_Species.iso1 == 'Bacteroides_ovatus'),
+             method = "lm",color='orange', formula = y ~ x, size = 1, se=TRUE)+
+  stat_smooth(data = filter(Bac,taxonomy_Species.iso1 == 'Bacteroides_thetaiotaomicron'),
+             method = "lm",color='green4', formula = y ~ x, size = 1, se=TRUE) +
+  stat_smooth(data = filter(Bac,taxonomy_Species.iso1 == 'Bacteroides_xylanisolvens'),
+              method = "lm",color='blue4', formula = y ~  x, size = 1, se=TRUE)+
+  ylab('Pangenome distance (Bray-Curtis)')+
+  xlab('Normalized phylogenetic distance'))
+
+```
+
+### Figure 5/6B
+Characterize frequency of genomic transfer events by their size, characterize the proportion of genes transferred by island size
+```{r}
+list.files(file.path(indir,'pairwise_gene_islands'))
+Bxy_prop = read_tsv(
+  file.path(indir,'pairwise_gene_islands','Bacteroides_xylanisolvens_events.txt'),
+  col_types = cols())
+Bov_prop = read_tsv(
+  file.path(indir,'pairwise_gene_islands','Bacteroides_ovatus_events.txt'),
+  col_types = cols())
+Bfr_prop  = read_tsv(
+  file.path(indir,'pairwise_gene_islands','Bacteroides_fragilis_events.txt'),
+  col_types = cols())
+Bth_prop  = read_tsv(
+  file.path(indir,'pairwise_gene_islands','Bacteroides_thetaiotaomicron_events.txt'),
+  col_types = cols())
+  
+compare_prop_events <- function(df) {
+  ##Proportions of events/genes by size 
+  print(distinct(select(df,iso1,host.iso1,iso2,host.iso2,tree_dist)))
+  
+  df_gene = df  %>% 
+      filter(tree_dist>0) %>% 
+      mutate(cat='gene') %>%
+      mutate(size_category=cut(cluster_size, breaks=c(0,5,10,15,20,25,50,250)))
+  df_event = df %>% 
+      distinct(comp,tree_dist,name,cluster_size) %>%
+      mutate(cat='event') %>%
+      mutate(size_category=cut(cluster_size, breaks=c(0,5,10,15,20,25,50,250)))
+  df_combined = df_gene %>% add_row(df_event) %>% 
+      group_by(cat,size_category,comp) %>%
+      summarise(count = n()) %>%
+      group_by(cat,comp) %>%
+      mutate(total = sum(count),
+         freq = count / total)%>% 
+      as.data.frame()
+  df_combined = df_combined %>% mutate(size_category = recode(size_category,
+                                '(0,5]'='1-5',
+                                '(5,10]'='6-10',
+                                '(10,15]'='11-15',
+                                '(15,20]'='16-20',
+                                '(20,25]'='21-25',
+                                '(25,50]'='26-50',
+                                '(50,250]'='50-250')
+         )
+  frac_events_genes = df_combined %>% 
+      ggplot(aes(x=size_category,y=freq,fill=cat)) +
+      geom_boxplot(position=position_dodge(width = 1)) + 
+      theme_bw() +
+      xlab('Event size')+
+      scale_y_continuous(
+        name = "Proportion of events",
+        sec.axis = sec_axis( trans=~., name="Proportion of genes")
+        ) + 
+      theme(
+        legend.position = c(.95, .95), 
+        legend.justification = c(.95, .95)
+        ) +
+      scale_fill_manual(values = c('orange2','purple3'))
+  return(frac_events_genes)
+}
+(Bxy_prop_plot = compare_prop_events(Bxy_prop))
+ggsave(Bxy_prop_plot,file=file.path(outdir,'Figure5_Bxy_prop_events_genes.pdf'),width=7,height=5)
+Bov_prop_plot = compare_prop_events(Bov_prop)
+Bth_prop_plot = compare_prop_events(Bth_prop)
+Bfr_prop_plot = compare_prop_events(Bfr_prop)
+(Bt_prop_other = plot_grid(Bov_prop_plot,Bfr_prop_plot,Bth_prop_plot,ncol=1,labels=c('A','B','C')))
+ggsave(Bt_prop_other,file=file.path(outdir,'FigureS3_Bt_prop_events_genes.pdf'),height=10,width=5)
+
+
+#50% genes transferred across all Bacteroides species
+Bac_prop = Bxy_prop %>% add_row(Bov_prop) %>% add_row(Bfr_prop) %>% add_row(Bth_prop)
+Bac_prop = Bac_prop %>% mutate(captive_strain = if_else(
+          str_detect(iso2, "^P")|str_detect(iso1, "^P"),1,0)) 
+ave_gene_island = Bac_prop %>% 
+  group_by(iso1,host.iso1,taxonomy_Species.iso1,iso2,host.iso2,taxonomy_Species.iso2,captive_strain) %>%
+  summarize(ave_gene_island_size=median(cluster_size))
+Bt_P50 = ave_gene_island %>% 
+  ggplot(aes(x=taxonomy_Species.iso1,
+             y=ave_gene_island_size,
+             color=taxonomy_Species.iso1)) +
+  theme_bw() +
+  geom_point(size=3)+ 
+  ylab('P50 event size') + 
+  xlab('Bacteroides species')+
+  theme(axis.text.x=element_blank()) +
+  scale_colour_manual(values=c('red3','orange','green4','blue4'))
+kruskal.test(ave_gene_island_size ~ taxonomy_Species.iso1,data=ave_gene_island)
+legend = get_legend(Bt_P50)
+Bt_P50_leg = plot_grid(Bt_P50+theme(legend.position="none"),legend,
+                       ncol=1,
+                       labels=c('B','C'),
+                       rel_heights =c(1.5,1))
+(Bt_pangenome_P50 = plot_grid(Bt_pangenome+theme(legend.position="none"),Bt_P50_leg,
+                              labels=c('A','B'),
+                              rel_widths = c(1.5,1)
+                              ))
+ggsave(Bt_pangenome_P50,file = file.path(outdir,'Figure6_Bacteroides_pangenome_P50.pdf'),width=10,height=4,
+       )
+```
+
+
+We hypothesized that comparisons between captive ape and human-associated strains would exhibit a higher proportion of larger events relative to human vs. humans comparisons. We found that captive ape vs. human-associated strain comparisons tended to have a greater proportion of events >50 genes in length, while human vs. human comparison had the greatest proportion of events in the range of 25-50 genes (Figure S1). 
+```{r}
+##Compare Proportions of genes 
+Bxy_gene = Bxy_prop  %>% 
+    filter(tree_dist>0) %>% 
+    mutate(cat='gene') %>%
+    mutate(size_category=cut(cluster_size, breaks=c(0,5,10,15,20,25,50,250))) %>%
+    mutate(captive_strain = if_else(
+          str_detect(iso2, "^P")|str_detect(iso1, "^P"),1,0)) #all isolates start with P
+#determine proportions
+Bxy_gene_freq = Bxy_gene  %>% 
+      group_by(cat,size_category,comp,captive_strain) %>%
+      summarise(count = n()) %>%
+      group_by(cat,comp) %>%
+      mutate(total = sum(count),
+         freq = count / total)%>% 
+      as.data.frame()
+Bxy_gene_freq$size_category
+Bxy_gene_freq = Bxy_gene_freq %>% 
+  mutate(size_category = recode(size_category,
+                                '(0,5]'='1-5',
+                                '(5,10]'='6-10',
+                                '(10,15]'='11-15',
+                                '(15,20]'='16-20',
+                                '(20,25]'='21-25',
+                                '(25,50]'='26-50',
+                                '(50,250]'='50-250')
+         )
+
+                       
+#compare captive vs.human to humanvs.human pairs
+(Bxy_captive_vs_human = Bxy_gene_freq %>% 
+      ggplot(aes(x=size_category,y=freq,
+             shape=as.factor(captive_strain))) +
+      geom_point(position=position_dodge(width=.5),size=3,color='blue4') + 
+      theme_bw() +
+      xlab('Event size')+
+      ylab("Proportion of genes")+ 
+      theme(
+        legend.position = c(.25, .95), 
+        legend.justification = c(.95, .95)
+        ))
+ggsave(Bxy_captive_vs_human,file=file.path(outdir,'FigureS1_Bxy_captive_vs_human.pdf'),
+       height=10,width=5)
+```
+
+

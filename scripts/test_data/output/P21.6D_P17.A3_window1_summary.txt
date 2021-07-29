@@ -1,0 +1,2 @@
+iso1	iso2	comp	genenum_iso1	genenum_iso2	dist_bray	subset_genenum_iso1	subset_genenum_iso2	subset_genenum_mrca	subset_dist_bray	subset_n_gene_diff_bray	iso1_gain	iso1_loss	iso2_gain	iso2_loss	total_events	iso1_gain_events	iso1_loss_events	iso2_gain_events	iso2_loss_events	iso1_G50	iso1_L50	iso2_G50	iso2_L50
+P21.6D	P17.A3	P21.6D_P17.A3	4914	5113	0.238	4711	4896	4053	0.245	2357	828	170	1101	258	421	100	87	145	89	21	3	18	7
