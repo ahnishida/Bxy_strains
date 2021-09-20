@@ -1,0 +1,201 @@
+---
+title: "identifying_source_genes"
+output: 
+  github_document: default
+  html_document: default
+---
+
+-Run diamond blast of faa files of 18 Bxy strains in 9 PICs against nr database
+
+ *./scripts/pangenome_analyses/source_genes/diamond_PIC.sh*
+ 
+-Read in results determine appropiate pident and palign cutoff values to find hits to other bacterial taxa that are comparably to hits to Bxy strains and subset to hits to those above that threshold
+ 
+-Combine with taxonomic table from gtdb to assign higher taxonomic ranks (Phyla,Order,Family) for hits to determine taxonomic distribution of high similarity hits
+ 
+-Output with table with GeneID and taxonomic distribution to be used by figures_tables.Rmd
+
+```{r setup, include=FALSE}
+rm(list=ls())
+knitr::opts_chunk$set(echo = TRUE)
+knitr::opts_knit$set(root.dir ='/stor/work/Ochman/alex/captive_ape_strain_genomes')
+library(tidyverse)
+```
+
+```{r}
+diamond_dir = 'results/pangenome/Bacteroides_xylanisolvens/diamond/'
+all_files = list.files(file.path(diamond_dir))
+(select_files = all_files[str_detect(all_files,'_blast.txt')])
+
+# defining the appropriate pident and palign cutoff
+infile = file.path(diamond_dir,select_files[1])
+df = read.csv(infile,sep='\t',header=F)
+colnames(df) = c('qseqid', 'sseqid', 'pident', 'length', 'qlen','mismatch', 'gapopen',
+               'qstart', 'qend', 'sstart', 'send', 'evalue', 'bitscore', 'salltitles')
+df = df %>% mutate(Bxy_hit = if_else(grepl("xylan", salltitles),1,0))
+Bxy_df = df %>% filter(Bxy_hit == 1) 
+summary(Bxy_df$pident)
+Bxy_df = Bxy_df %>% filter(pident>.98)
+summary(Bxy_df$length/Bxy_df$qlen)
+
+#apply 98% pident and 98% palign cutoff to hits
+read_diamond <- function(infile){
+  outfile = str_replace(infile,'_blast.txt','_blast98.txt')
+  df = read.csv(infile,sep='\t',header=F)
+  colnames(df) = c('qseqid', 'sseqid', 'pident', 'length', 'qlen','mismatch', 'gapopen',
+               'qstart', 'qend', 'sstart', 'send', 'evalue', 'bitscore', 'salltitles')
+  df = df %>% mutate(Bxy_hit = ifelse(str_contains('xylanisolvens',salltitles),1,0))
+  
+  df = df %>% filter(pident>98 & length/qlen > .98) 
+  df = df %>% separate_rows(salltitles,sep='<>')
+  df = df %>% mutate(taxonomy = stringr::str_extract(string = df$salltitles,
+                              pattern = "(?<=\\[).*(?=\\])"),
+                     taxonomy = sapply(str_split(taxonomy,'\\['), tail, 1),
+                     taxonomy = str_replace(taxonomy,"Candidatus ",""),
+                     taxonomy = str_replace(taxonomy,"uncultured ",""),
+                     taxonomy = str_replace(taxonomy,"unclassified ",""),
+                     palign = length/qlen,
+                     Genus = sapply(str_split(taxonomy,'\\ '), head, 1),
+                     Species = sapply(str_split(taxonomy,'\\ '), "[", 2),
+                     Species = replace_na(Species,value='sp.'),
+                     Genus_Species = paste0(Genus,'_',Species)) %>%
+                     as.data.frame()
+  df = df %>% group_by(qseqid,Genus_Species) %>% 
+      slice_min(order_by = evalue, n=1,with_ties = F) 
+  write_tsv(df,outfile)
+  return(df)
+}
+
+#filter blast hits 
+#read_diamond(file.path(diamond_dir,'P14.E4_blast.txt'))
+#read_diamond(file.path(diamond_dir,'P21.6E_blast.txt'))
+#read_diamond(file.path(diamond_dir,'P21.11A_blast.txt'))
+
+#use bac120 taxonomy in GTDB to define higher taxonomic ranks for hits
+bac = read_tsv('bin/bac120_taxonomy.tsv',col_names = F,col_types = cols()) %>%
+  separate(X2,sep=';',into = c('Domain','Phylum','Class','Order','Family','Genus','Species'))
+bac = bac %>% mutate(Phylum = str_replace(Phylum,'p__',''),
+                     Order = str_replace(Order,'o__',''), 
+                     Family = str_replace(Family,'f__',''), 
+                     Genus = str_replace(Genus,'g__',''),
+                     Species = str_replace(Species,'s__',''),
+                     Species = str_replace(Species,' ','_')) %>%
+                mutate(Phylum = recode(Phylum,
+                                       Bacteroidota = 'Bacteroidetes',
+                                       Firmicutes_A = 'Firmicutes',
+                                       Actinobacteriota = 'Actinobacteria'))
+
+#merge results for 3 representatives captive ape lineages
+diamond = read_tsv(file.path(diamond_dir,'P14.E4_blast98.txt'),col_types = cols()) %>%
+    add_row(read_tsv(file.path(diamond_dir,'P21.6E_blast98.txt'),col_types = cols())) %>%
+    add_row(read_tsv(file.path(diamond_dir,'P21.11A_blast98.txt'),col_types = cols())) 
+
+#merge with GTDB to get phylum, order and family designations
+diamond_genus = diamond %>% 
+  left_join(distinct(select(bac,Phylum,Order,Family,Genus)),by = 'Genus') %>%
+  rename('GeneID' = 'qseqid') %>%
+  select(GeneID,pident,palign,salltitles,Phylum,Order,Family,Genus,Species,Genus_Species) 
+
+#assign taxonomy info for hist whose entry for Genus is not found in GTDB
+diamond_notfound = diamond_genus %>% filter(is.na(Phylum))
+sort(table(diamond_notfound$Genus))
+
+reclassify <- function(df,taxanames,phylum_order){
+  df_to_change = df %>% filter(Genus %in% taxanames)
+  df = df %>% filter(!Genus %in% taxanames)
+  df_to_change$Phylum <- phylum_order[[1]]
+  df_to_change$Order <- phylum_order[[2]]
+  df_to_change$Family <- NA
+  df_to_change$Genus <- NA
+  df_to_change$Species <- NA
+  df=rbind(df,df_to_change)
+  return(df)
+  }
+
+diamond_genus = reclassify(diamond_genus,
+                           taxanames = c('Bacteroidia','Bacteroidetes'),
+                           phylum_order = c('Bacteroidetes',NA))
+diamond_genus = reclassify(diamond_genus,
+                           taxanames = c('Flavobacteriales'),
+                           phylum_order = c('Bacteroidetes','Flavobacteriales'))
+diamond_genus = reclassify(diamond_genus,
+                           taxanames = c('Bacteroidaceae','Bacteroidales','Muribaculaceae',
+                                         'Paludibacteraceae','Porphyromonadaceae','Mediterranea',
+                                         'Dysgonamonadaceae','Dysgonomonadaceae','Gallibacteroides',
+                                         'Hallella','Avibacteroides','Limisoma','Rikenellaceae',
+                                         'Caccoplasma'),
+                           phylum_order = c('Bacteroidetes','Bacteroidales'))
+diamond_genus = reclassify(diamond_genus,
+                           taxanames = c('Firmicutes','Erysipelotrichia','Clostridia','Solobacterium',
+                                         'Clostridiales','Lachnospiraceae','Oscillospiraceae',
+                                         'Tyzzerella'),
+                           phylum_order = c('Firmicutes',NA))
+diamond_genus = reclassify(diamond_genus,
+                           taxanames = c('Proteobacteria','Shigella','Dechloromonas',
+                                         'Alphaproteobacteria','Caedimonadaceae'),
+                           phylum_order = c('Proteobacteria',NA))
+diamond_genus = reclassify(diamond_genus,
+                           taxanames = c('bacterium','Bacteria','organism','Lentisphaeria'),
+                           phylum_order = c(NA,NA))
+diamond_genus = reclassify(diamond_genus,
+                           taxanames = c('Microviridae','Podoviridae','Bacteriophage',
+                                         'Siphoviridae','Myoviridae','CrAss-like','virus'),
+                           phylum_order = c('Bacteriophage',NA))
+
+diamond_notfound = diamond_genus %>% filter(is.na(Phylum))
+sort(table(diamond_notfound$Genus))
+table(diamond_genus$Phylum)
+
+#for an individual GeneIDs, determine taxonomic distribution of hits to nr database
+diamond_genus = diamond_genus  %>% group_by(GeneID) %>%
+                     mutate(found_in_phage = if_else('Bacteriophage' %in% Phylum,1,0),
+                     multiphyla =if_else(
+                       length(setdiff(unique(Phylum),c('Bacteriophage',NA)))>1,1,0),
+                     multiorder = if_else(length(setdiff(unique(Order),NA))>1|multiphyla==1,1,0),
+                     multigenus = if_else(length(setdiff(unique(Genus),NA))>1|multiorder==1,1,0),
+                     multispecies = if_else(
+                       length(setdiff(Species,c('sp.',NA)))>1|multigenus==1,1,0),
+                     singlespecies = if_else(length(setdiff(Species,c('sp.',NA)))==1,1,0))
+
+diamond_genus = diamond_genus  %>% group_by(GeneID) %>%
+                    mutate( 
+                      #assign taxonomic categories
+                      cat = ifelse(multiphyla==1,'multiphyla',
+                            ifelse(multiorder==1,'multiorder',
+                              ifelse(multigenus==1,'multigenus',
+                                ifelse(multispecies==1,'multispecies',
+                                  ifelse(singlespecies ==1,'singlespecies','unclassified'))))),
+                      
+                      #assign most conserved taxonomic rank
+                      group = ifelse(multiphyla==1,'Bacteria',
+                          ifelse(
+                            multiorder==1,toString(setdiff(unique(Phylum),c(NA,'Bacteriophage'))),
+                              ifelse(multigenus==1,toString(setdiff(unique(Order),NA)),
+                                  ifelse(multispecies==1,toString(setdiff(unique(Genus),NA)),
+                                      ifelse(singlespecies==1,
+                                            paste(
+                                                toString(setdiff(unique(Genus),NA)),
+                                                toString(setdiff(unique(Species),c('sp.',NA))),
+                                                sep='_'),
+                                            'unclassified'))))),
+                      #creates lists for individual taxonomic ranks
+                      phylalist = toString(setdiff(unique(Phylum),NA)),
+                      orderlist = toString(setdiff(unique(Order),NA)),
+                      genuslist = toString(setdiff(unique(Genus),NA)),
+                      specieslist = toString(setdiff(unique(Species),NA))
+                      )
+#some hits were unclassified ie hitting to bacteriophage or Bacteroides_sp. but no classified taxa
+unclassified = diamond_genus %>% filter(group=='unclassified') 
+unclassified = unclassified %>% mutate(group = if_else(!is.na(Genus),Genus_Species,Phylum))
+classified = diamond_genus %>% filter(group!='unclassified')                                    
+diamond_genus =  rbind(classified,unclassified) 
+
+diamond_genus_short = diamond_genus %>%
+  group_by(GeneID) %>%
+    slice_max(order_by='pident',with_ties=F,n=1) %>% #get a single representative per GENEID
+    select(-c(pident:singlespecies)) #remove columns specific to individual hits
+
+write_tsv(diamond_genus_short,file.path(diamond_dir,'diamond_blast_taxonomy.txt'))
+
+```
+

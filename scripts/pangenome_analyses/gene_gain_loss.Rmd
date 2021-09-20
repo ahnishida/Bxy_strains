@@ -11,27 +11,26 @@ Identify 50 representative strains for each Bacteroides species
 
 Determine gene gain and loss events for phylogenetically independent comparisons of isolates
 
+Outputs summary files to be used by figures_tables.Rmd
+
 ```{r setup, include=FALSE}
 rm(list=ls())
 knitr::opts_chunk$set(echo = TRUE)
 knitr::opts_knit$set(root.dir ='/stor/work/Ochman/alex/captive_ape_strain_genomes')
 library(ape)
-library(treeio)
 library(ggtree)
-library(estimatr)
 library(tidyverse)
-library(seqinr)
-library(stringr)
-library(cowplot)
 library(harrietr)
 library(vegan)
-library(data.table)
 ```
 
 ### Run count
 ```{r runCount,message=FALSE,results='hide',warning=FALSE}
 runCount <- function(species,gain_penalty) {
+  #reconstructs ancestral genome content among strain of a given bacteroides species
+  #with set gain penalty
   
+  #define inputs/outdir
   dir = file.path('results/pangenome',species)
   tree_file = file.path(dir,paste0(species,'.tre'))
   pres_abs_file = file.path(dir,"roary_nosplitparalogs/gene_presence_absence.csv")
@@ -47,7 +46,7 @@ runCount <- function(species,gain_penalty) {
   #format pres abs table for count
   pres_abs <- read_csv(pres_abs_file, col_types = cols())
   colnames(pres_abs) <- stringr::str_replace_all(colnames(pres_abs),'[_-]','.')
-  isblank <-  function(x) {
+  isblank <-  function(x) { 
     gene_count = as.numeric(str_count(x, pattern = "_"))
     gene_count = if_else(is.na(gene_count),0,gene_count)
     }
@@ -74,14 +73,23 @@ runCount <- function(species,gain_penalty) {
     select(-FAMILY)
   write_tsv(family,paste0(count_outfile,".FAMILY"))
   
+  #compare # of genes in ancestral genomes vs extant genomes
+  present <- read.table(paste0(count_outfile,".PRESENT"),sep='\t',header=TRUE)
+  res <- present %>% 
+    mutate(istip = if_else(node %in% tree$tip.label,'tip','node')) %>% 
+    rstatix::kruskal_test(genes ~ istip)
+  print(res)
+  
 }
-
-#runCount('Bacteroides_xylanisolvens', 1)
-runCount('Bacteroides_xylanisolvens', 2)
-#runCount('Bacteroides_ovatus', 2)
-#runCount('Bacteroides_fragilis', 2)
-#runCount('Bacteroides_thetaiotaomicron', 2)
 ```
+```{r eval=F}
+runCount('Bacteroides_xylanisolvens', 1)
+runCount('Bacteroides_xylanisolvens', 2)
+runCount('Bacteroides_ovatus', 2)
+runCount('Bacteroides_fragilis', 2)
+runCount('Bacteroides_thetaiotaomicron', 2)
+```
+
 
 ### Determine 50 representative strains for each Bacteroides species
 calculate phylogenetic distance and gene content distance among all pairwise combinations
@@ -95,7 +103,8 @@ identify_pw_50strain = function(species) {
   dir = paste0('results/pangenome/',species)
   outfile = file.path(dir,'gene_gain_loss/pw_50strain.txt')
   metadata = read_tsv(file.path(dir,'metadata.txt'),col_types = cols())
-  pres_abs <- read_csv(file.path(dir,'roary_nosplitparalogs/gene_presence_absence.csv'),col_types = cols())
+  pres_abs <- read_csv(file.path(dir,'roary_nosplitparalogs/gene_presence_absence.csv'),
+                       col_types = cols())
   tree = read.tree(file.path(dir,paste0("phylogeny/RAxML_bipartitions.",species)))
 
   #create distance matrix from tree
@@ -150,8 +159,9 @@ Bfr_pw = identify_pw_50strain("Bacteroides_fragilis")
 Bth_pw = identify_pw_50strain("Bacteroides_thetaiotaomicron")
 ```
 
+
 ### Identify phylogenetically independent contrasts for each Bacteroides species
-start with Bxy strain and determine min phylogenetic distance cutoff that gets 3 comparisons between captive ape associated strains and closest human associated strain. 
+Start with Bxy strain and determine min phylogenetic distance cutoff that gets 3 comparisons between captive ape associated strains and closest human associated strain. 
 
 Determine how many sd this value is below the mean and then apply similar phylogenetic distance cutoff to other Bacteroides species. 
 ```{r,warning=FALSE}
@@ -160,19 +170,17 @@ get_phylo_independent_comps = function(species,cutoff,outfile) {
   #given the min cutoff tree dist
   
   #read in input files
-  print(species)
+  print(c(species,cutoff))
   dir = paste0('results/pangenome/',species)
   outfile = file.path(dir,'gene_gain_loss/PI_comps.txt')
   metadata = read_tsv(file.path(dir,'metadata.txt'),col_types = cols())
   tree = read.tree(file.path(dir,paste0(species,'.tre')))
   outgroup = metadata %>% filter(taxonomy_Species!=species) %>% pull(isolate)
-  #host_missing = metadata %>% filter(host=='missing') %>% pull(isolate)
   tree = drop.tip(tree,outgroup)
-  #tree = drop.tip(tree,host_missing)
   tree_dist <- cophenetic.phylo(tree)
   pw_df <- melt_dist(tree_dist) %>% 
     dplyr::rename(tree_dist=dist) %>% 
-    filter(tree_dist > as.numeric(cutoff))
+    filter(tree_dist > as.numeric(cutoff)) #filter out comparison below cutoff
   
   #add metadata to pw comparisons
   metadata_subset <- metadata %>% dplyr::select(isolate,host,sample,taxonomy_Species)
@@ -187,25 +195,24 @@ get_phylo_independent_comps = function(species,cutoff,outfile) {
     mutate(comp = paste(iso1,iso2,sep='_')) 
   
   identify_taxa <- function(iso1,iso2) {
-    #determine all isolates have the same MRCA as two input isolates
-    node = getMRCA(tree,c(iso1,iso2))
-    subtree = extract.clade(tree, node)
-    return(subtree$tip.label)
-  }
+      #determine all isolates that have the same MRCA as two input isolates
+      node = getMRCA(tree,c(iso1,iso2))
+      subtree = extract.clade(tree, node)
+      return(subtree$tip.label)
+      }
   
-  taxa = c()
-  rows = c()
+  taxa = c() #start with blank list of taxa to exclude
+  rows = c() #start with blank list of PICs
   for (row in 1:nrow(pw_df_meta)) { #loop through tree distm
     iso1=pw_df_meta[row,1]
     iso2=pw_df_meta[row,2]
     subtree_taxa = identify_taxa(iso1,iso2)
-    #add row to list if there's no phylogenetic overlap with isolate comparison already present in the   list
+    #add row to list if there's no phylogenetic overlap 
     if (length(intersect(subtree_taxa,taxa))==0){ 
-      taxa = c(taxa,subtree_taxa)  #keep track of isolates included in comparisons            
-      rows=c(rows,row)
-      print(row)
-    }
-  }
+        taxa = c(taxa,subtree_taxa)  #keep track of isolates included in comparisons            
+        rows=c(rows,row)
+        }
+      }
   PI_comps = pw_df_meta[rows,]
   PI_comps$compNum = paste0('P',as.list(1:nrow(PI_comps)))
   write_tsv(PI_comps,file = outfile)
@@ -223,28 +230,27 @@ get_phylo_independent_comps = function(species,cutoff,outfile) {
   print(test_tree)
   
   return(PI_comps)
-}
+  }
 
 Bxy_cutoff = .008
 Bxy_PIC = get_phylo_independent_comps('Bacteroides_xylanisolvens',Bxy_cutoff)
-(sd_from_mean = (Bxy_cutoff - mean(Bxy_pw$tree_dist))/sd(Bxy_pw$tree_dist))
+sd_from_mean = (Bxy_cutoff - mean(Bxy_pw$tree_dist))/sd(Bxy_pw$tree_dist)
 
 #apply cutoff same sd below mean for other Bt species
-(Bov_cutoff = mean(Bov_pw$tree_dist)+sd_from_mean*sd(Bov_pw$tree_dist))
+Bov_cutoff = mean(Bov_pw$tree_dist)+sd_from_mean*sd(Bov_pw$tree_dist)
 Bov_PIC = get_phylo_independent_comps('Bacteroides_ovatus',Bov_cutoff)
-(Bfr_cutoff = mean(Bfr_pw$tree_dist)+sd_from_mean*sd(Bfr_pw$tree_dist))
+Bfr_cutoff = mean(Bfr_pw$tree_dist)+sd_from_mean*sd(Bfr_pw$tree_dist)
 Bfr_PIC = get_phylo_independent_comps('Bacteroides_fragilis',Bfr_cutoff)
-(Bth_cutoff = mean(Bth_pw$tree_dist)+sd_from_mean*sd(Bth_pw$tree_dist))
+Bth_cutoff = mean(Bth_pw$tree_dist)+sd_from_mean*sd(Bth_pw$tree_dist)
 Bth_PIC = get_phylo_independent_comps('Bacteroides_thetaiotaomicron',Bth_cutoff)
 ```
-```{r,warning=F,results='hide'}
+```{r,message=FALSE,results='hide',warning=FALSE}
 source('scripts/pangenome_analyses/gene_gain_loss_functions.R')
 ```
 
 
 ### Determine gene loss/gain across PIC using either 1 or 2 gain penalty and a windowsize of 5 or 1 genes
-```{r,warning=F,results='hide'}
-
+```{r,message=FALSE,results='hide',warning=FALSE}
 pairwise_gene_gain_runner = function(iso1,iso2,species,gp,window_size) {
   #set input filepaths to run pairwise_gene_gain
   dir = paste0('results/pangenome/',species)
@@ -257,7 +263,8 @@ pairwise_gene_gain_runner = function(iso1,iso2,species,gp,window_size) {
   iso1_gff_file = paste0('results/pangenome/prokka/',iso1_old,'/',iso1_old,'.gff')
   iso2_gff_file = paste0('results/pangenome/prokka/',iso2_old,'/',iso2_old,'.gff')
   countTREE_file=file.path(dir,paste0("gene_gain_loss/count/count_",species,".tre"))
-  countOutput_file=file.path(dir,paste0("gene_gain_loss/count/countOutput_",species,"_gainpenalty",gp,".FAMILY"))
+  countOutput_file=file.path(dir,paste0(
+    "gene_gain_loss/count/countOutput_",species,"_gainpenalty",gp,".FAMILY"))
   pairwise_gene_gain(
     #loaded from functions script
     pres_abs_file  = pres_abs_file,
@@ -272,22 +279,38 @@ pairwise_gene_gain_runner = function(iso1,iso2,species,gp,window_size) {
     gainPenalty=gp)
 }
 
-pairwise_gene_gain_runner('P21.11A','GCA.003458755.1.ASM345875v1','Bacteroides_xylanisolvens',gp = 1,window_size =5)
-
 Bxy_PIC = read_tsv('results/pangenome/Bacteroides_xylanisolvens/gene_gain_loss/PI_comps.txt',col_types = cols())
-#mapply(pairwise_gene_gain_runner,Bxy_PIC$iso1,Bxy_PIC$iso2,'Bacteroides_xylanisolvens',window_size = 5,gp = 2)
-#mapply(pairwise_gene_gain_runner,Bxy_PIC$iso1,Bxy_PIC$iso2,'Bacteroides_xylanisolvens',window_size = 5,gp = 1)
-#mapply(pairwise_gene_gain_runner,Bxy_PIC$iso1,Bxy_PIC$iso2,'Bacteroides_xylanisolvens',window_size = 1,gp = 2)
-
 Bov_PIC = read_tsv('results/pangenome/Bacteroides_ovatus/gene_gain_loss/PI_comps.txt',col_types = cols())
-#mapply(pairwise_gene_gain_runner,Bov_PIC$iso1,Bov_PIC$iso2,'Bacteroides_ovatus',window_size = 5, gp = 2)
 Bfr_PIC = read_tsv('results/pangenome/Bacteroides_fragilis/gene_gain_loss/PI_comps.txt',col_types = cols())
-#mapply(pairwise_gene_gain_runner,Bfr_PIC$iso1,Bfr_PIC$iso2,'Bacteroides_fragilis',window_size = 5, gp = 2)
 Bth_PIC = read_tsv('results/pangenome/Bacteroides_thetaiotaomicron/gene_gain_loss/PI_comps.txt',col_types = cols())
-#mapply(pairwise_gene_gain_runner,Bth_PIC$iso1,Bth_PIC$iso2,'Bacteroides_thetaiotaomicron',window_size = 5, gp = 2)
+
+#test command
+pairwise_gene_gain_runner('P21.11A','GCA.003458755.1.ASM345875v1','Bacteroides_xylanisolvens',gp = 2,window_size =5)
 
 
+```
+
+### Run gene gain loss on all PIC
+```{r eval=F}
+#Bxy
+mapply(pairwise_gene_gain_runner,Bxy_PIC$iso1,Bxy_PIC$iso2,'Bacteroides_xylanisolvens',window_size = 5,gp = 2)
+mapply(pairwise_gene_gain_runner,Bxy_PIC$iso1,Bxy_PIC$iso2,'Bacteroides_xylanisolvens',window_size = 1,gp = 2)
+#Bov
+mapply(pairwise_gene_gain_runner,Bov_PIC$iso1,Bov_PIC$iso2,'Bacteroides_ovatus',window_size = 5, gp = 2)
+#Bfr
+mapply(pairwise_gene_gain_runner,Bfr_PIC$iso1,Bfr_PIC$iso2,'Bacteroides_fragilis',window_size = 5, gp = 2)
+#Bth
+mapply(pairwise_gene_gain_runner,Bth_PIC$iso1,Bth_PIC$iso2,'Bacteroides_thetaiotaomicron',window_size = 5, gp = 2)
+```
+
+```{rmessage=FALSE,results='hide',warning=FALSE}
 get_summary_output <- function(species,suffix){
+  #outputs various summary files of varying detail; 
+  #summary df is the highest level, each row represents a PIC
+  #gff is detailed each row represents a GeneID with its island,start and stop position
+  #island output each row represents an indivdiual genomic island
+  #copynumber table preserves copy numbers of each HGG
+
   dir = paste0('results/pangenome/',species)
   pw_outdir = file.path(dir,'gene_gain_loss/PIC_gene_gain_loss')
   summary_outdir = file.path(dir,'gene_gain_loss/PIC_gene_gain_loss_summary')
@@ -321,9 +344,9 @@ get_summary_output <- function(species,suffix){
 }
 
 get_summary_output('Bacteroides_xylanisolvens','window5_gp2')
-get_summary_output('Bacteroides_xylanisolvens','window5_gp1')
 get_summary_output('Bacteroides_xylanisolvens','window1_gp2')
 get_summary_output('Bacteroides_ovatus','window5_gp2')
 get_summary_output('Bacteroides_fragilis','window5_gp2')
 get_summary_output('Bacteroides_thetaiotaomicron','window5_gp2')
 ```
+

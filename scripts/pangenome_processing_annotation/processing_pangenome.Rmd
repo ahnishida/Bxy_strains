@@ -61,6 +61,7 @@ metadata <- metadata %>%
   unite(host_site, host, site, sep = "_", remove = FALSE) 
 
 metadata %>% group_by(included_analysis,dataset) %>% tally()
+
 TableS1 = metadata %>% filter(dataset == 'isolate_genomes')
 write_tsv(TableS1,'metadata/TableS1_isolate_genomes.txt')
 TableS2 = metadata %>% filter(dataset == 'ncbi_genomes')
