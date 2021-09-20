@@ -1018,7 +1018,7 @@ print(length(non_copies))
 #
 TableS5 <- captive_reps_178 %>% 
   filter(Gene %in% non_copies) 
-write_tsv(TableS5,file=file.path(outdir,'TableS5.txt'))
+write_tsv(TableS5,file.path(outdir,'TableS5.txt'))
 TableS5$specieslist[str_detect(TableS5$specieslist,'xylan')]
 ```
 
@@ -1045,18 +1045,15 @@ all_prot file not uploaded to github showing how sulftase.faa was generated
 #all_prot = readAAStringSet(all_prot_file)
 #names(all_prot) <- sapply(strsplit(names(all_prot)," "), `[`, 1)
 #sulfatase_prot = all_prot[names(all_prot) %in% sulfatase_genes$Gene.ID] 
-sulfatase_prot_file = file.path(sulfa_outdir,'sulfatase.faa')
+#sulfatase_prot_file = file.path(sulfa_outdir,'sulfatase.faa')
 #writeXStringSet(sulfatase_prot,sulfatase_prot_file)
+### make tree of sulfa genes
+#set.seed(131)
+#system(paste0('mafft --auto ',sulfatase_prot_file,' > ',sulfatase_prot_file,'.align'))
+#system(paste0('fasttree ',sulfatase_prot_file,'.align > ',sulfatase_prot_file,'.tree'))
 ```
 
 ```{r}
-### make tree of sulfa genes
-set.seed(131)
-#uncomment to run
-sulfatase_prot_file = file.path(sulfa_outdir,'sulfatase.faa')
-#system(paste0('mafft --auto ',sulfatase_prot_file,' > ',sulfatase_prot_file,'.align'))
-#system(paste0('fasttree ',sulfatase_prot_file,'.align > ',sulfatase_prot_file,'.tree'))
-  
 present_in_isolates <- function(list_of_genes,list_of_isolates,name) {
   #given list of genes and isolates, determine the total number of genes present in isolates
   isolate_gene_table <- annotation %>% 
@@ -1126,6 +1123,7 @@ pres = pres[c('human_cladeC','human_cladeB','gorilla2_cladeB',
               'human_cladeA','mixedhost_cladeA','gorilla1_cladeA')]
 
 #label tree tips with sulfatase gene ortholog
+sulfatase_prot_file = file.path(sulfa_outdir,'sulfatase.faa')
 sulfa_tree <- read.tree(paste0(sulfatase_prot_file,'.tree')) #read in tree
 get_group <- function(prot){sulfadata$Gene[sulfadata$Gene.ID == prot]}
 sulfa_tree$tip.label <- as.character(lapply(sulfa_tree$tip.label,get_group))
