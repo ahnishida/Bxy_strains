@@ -128,13 +128,38 @@ captive_PUL_table = captive_convergent_table %>%
 #get rid of colnames that are all na
 captive_PUL_table = captive_PUL_table %>%  
   filter(rowSums(is.na(captive_PUL_table)) != ncol(captive_PUL_table)-1) 
-#number of HGGs in PUL
-captive_PUL_table %>%
-  separate(col = 'Gene',into=c('Gene'),extra='drop',sep='.1') %>%
-  pull(Gene) %>% unique() %>% length()
+
+#number of HGGs in PUL = 126
+captive_PUL_table$Gene
 ```
 
-    ## [1] 112
+    ##   [1] "group_7689"   "group_16986"  "group_16987"  "group_16988"  "group_16989" 
+    ##   [6] "group_7690"   "group_16973"  "rcsC_28"      "group_16984"  "glaB_2"      
+    ##  [11] "group_20295"  "group_20296"  "group_20297"  "group_20298"  "group_20299" 
+    ##  [16] "group_20300"  "group_20301"  "group_20302"  "group_20303"  "group_20304" 
+    ##  [21] "rhmA"         "group_20306"  "gabD"         "group_20308"  "group_20309" 
+    ##  [26] "hypBA1_1"     "gci"          "rhaT_1"       "ftsH_1"       "ywlE"        
+    ##  [31] "group_20315"  "group_20316"  "group_20317"  "group_20318"  "group_20319" 
+    ##  [36] "group_20320"  "prpC"         "group_20322"  "group_20323"  "group_20324" 
+    ##  [41] "group_20325"  "group_20326"  "group_20327"  "group_20328"  "group_20329" 
+    ##  [46] "group_20330"  "group_20331"  "group_20332"  "group_20333"  "pgpA_1"      
+    ##  [51] "group_20336"  "group_20337"  "group_20338"  "group_20927"  "group_3074"  
+    ##  [56] "group_4677"   "group_4678"   "kdpB_1"       "group_7683"   "group_7684"  
+    ##  [61] "group_7685"   "glaB_1"       "group_7687"   "atsA_7"       "group_7854"  
+    ##  [66] "group_20520"  "group_20521"  "glcC"         "lutR_1"       "group_20524" 
+    ##  [71] "tatA_1"       "group_20526"  "group_20527"  "group_20528"  "group_20529" 
+    ##  [76] "group_20530"  "group_20531"  "group_20704"  "group_4681"   "group_4682"  
+    ##  [81] "group_20334"  "group_20561"  "group_20562"  "group_20563"  "group_20564" 
+    ##  [86] "group_20565"  "group_20566"  "group_20567"  "group_20568"  "group_20569" 
+    ##  [91] "group_20570"  "group_20571"  "group_20572"  "group_20573"  "group_20532" 
+    ##  [96] "group_20533"  "group_20534"  "group_20535"  "group_20536"  "group_20537" 
+    ## [101] "group_20538"  "group_20539"  "group_20540"  "group_20541"  "group_20542" 
+    ## [106] "uidA_2"       "group_20544"  "group_20545"  "group_20546"  "group_20547" 
+    ## [111] "group_20548"  "group_20549"  "cgiA"         "cglA_1"       "cglA_2"      
+    ## [116] "group_20553"  "group_20554"  "group_20555"  "group_20556"  "group_20557" 
+    ## [121] "group_20558"  "group_20559"  "group_20560"  "group_4683"   "group_7827"  
+    ## [126] "group_7820"   "kdpB_1.1"     "group_4678.1" "group_4683.1" "group_4682.1"
+    ## [131] "group_4681.1" "group_4677.1"
 
 ``` r
 #plot heatmap of PUL subset
@@ -143,7 +168,6 @@ captive_PUL_tableM = captive_PUL_table %>%
   column_to_rownames(var='Gene') %>%
   arrange_all() %>% 
   t()
-
 
 (captive_convergent_heatmap <- gheatmap(
                               ggtree(Bxy_tree_captive) + geom_tiplab() + ylim(-10,NA),

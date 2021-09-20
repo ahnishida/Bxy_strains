@@ -112,10 +112,9 @@ captive_PUL_table = captive_convergent_table %>%
 #get rid of colnames that are all na
 captive_PUL_table = captive_PUL_table %>%  
   filter(rowSums(is.na(captive_PUL_table)) != ncol(captive_PUL_table)-1) 
-#number of HGGs in PUL
-captive_PUL_table %>%
-  separate(col = 'Gene',into=c('Gene'),extra='drop',sep='.1') %>%
-  pull(Gene) %>% unique() %>% length()
+
+#number of HGGs in PUL = 126
+captive_PUL_table$Gene
 
 #plot heatmap of PUL subset
 captive_PUL_tableM = captive_PUL_table %>% 
@@ -123,7 +122,6 @@ captive_PUL_tableM = captive_PUL_table %>%
   column_to_rownames(var='Gene') %>%
   arrange_all() %>% 
   t()
-
 
 (captive_convergent_heatmap <- gheatmap(
                               ggtree(Bxy_tree_captive) + geom_tiplab() + ylim(-10,NA),
