@@ -4,12 +4,14 @@ library(Biostrings)
 library(harrietr)
 library(vegan)
 library(tidyverse)
+library(ape)
 
 #script contains all functions to cluster genes into genomic islands and 
 #conduct pairwise genome comparisons, to test out functions download test data
 #and uncomment function test runs.
 
 ##test inputs
+#setwd(#path_to_repo)
 #test_dir = 'scripts/test_data'
 #list.files(test_dir)
 #pres_abs <- read_csv(file.path(test_dir,'gene_presence_absence.csv'),col_types = cols())
@@ -204,7 +206,7 @@ get_mrca = function(countFAMILYoutput_file,countTREE_file,copynum_table) {
   nodeNumber = ape::getMRCA(countTREE,c(iso1,iso2))
   nodeName = tree_data %>% filter(node==nodeNumber) %>% pull(label)
   countFAMILYoutput = read_tsv(countFAMILYoutput_file,col_types = cols())
-  mrca_gene_counts = countFAMILYoutput %>% select(Gene,nodeName) %>% as.data.frame()
+  mrca_gene_counts = countFAMILYoutput %>% select(Gene,all_of(nodeName)) %>% as.data.frame()
   colnames(mrca_gene_counts) = c('Gene','mrca')
   copynum_mrca_table = copynum_table %>% 
     left_join(mrca_gene_counts,by='Gene') 
