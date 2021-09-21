@@ -70,9 +70,31 @@ runCount <- function(species,gain_penalty) {
 }
 ```
 
+### Compare gain penalty of 1 vs 2
+
 ``` r
 runCount('Bacteroides_xylanisolvens', 1)
+```
+
+    ## [1] "results/pangenome/Bacteroides_xylanisolvens/gene_gain_loss/count/countOutput_Bacteroides_xylanisolvens_gainpenalty1"
+    ## # A tibble: 1 x 6
+    ##   .y.       n statistic    df        p method        
+    ## * <chr> <int>     <dbl> <int>    <dbl> <chr>         
+    ## 1 genes   267      14.8     1 0.000118 Kruskal-Wallis
+
+``` r
 runCount('Bacteroides_xylanisolvens', 2)
+```
+
+    ## [1] "results/pangenome/Bacteroides_xylanisolvens/gene_gain_loss/count/countOutput_Bacteroides_xylanisolvens_gainpenalty2"
+    ## # A tibble: 1 x 6
+    ##   .y.       n statistic    df     p method        
+    ## * <chr> <int>     <dbl> <int> <dbl> <chr>         
+    ## 1 genes   267      1.13     1 0.289 Kruskal-Wallis
+
+### Run count on other Bt species with gp 2
+
+``` r
 runCount('Bacteroides_ovatus', 2)
 runCount('Bacteroides_fragilis', 2)
 runCount('Bacteroides_thetaiotaomicron', 2)
@@ -232,7 +254,7 @@ Bxy_PIC = get_phylo_independent_comps('Bacteroides_xylanisolvens',Bxy_cutoff)
 
     ## [1] "Bacteroides_xylanisolvens" "0.008"
 
-![](gene_gain_loss_files/figure-gfm/unnamed-chunk-3-1.png)<!-- -->
+![](gene_gain_loss_files/figure-gfm/unnamed-chunk-4-1.png)<!-- -->
 
 ``` r
 sd_from_mean = (Bxy_cutoff - mean(Bxy_pw$tree_dist))/sd(Bxy_pw$tree_dist)
@@ -244,7 +266,7 @@ Bov_PIC = get_phylo_independent_comps('Bacteroides_ovatus',Bov_cutoff)
 
     ## [1] "Bacteroides_ovatus"  "0.00872960318295377"
 
-![](gene_gain_loss_files/figure-gfm/unnamed-chunk-3-2.png)<!-- -->
+![](gene_gain_loss_files/figure-gfm/unnamed-chunk-4-2.png)<!-- -->
 
 ``` r
 Bfr_cutoff = mean(Bfr_pw$tree_dist)+sd_from_mean*sd(Bfr_pw$tree_dist)
@@ -253,7 +275,7 @@ Bfr_PIC = get_phylo_independent_comps('Bacteroides_fragilis',Bfr_cutoff)
 
     ## [1] "Bacteroides_fragilis" "0.00479880289508962"
 
-![](gene_gain_loss_files/figure-gfm/unnamed-chunk-3-3.png)<!-- -->
+![](gene_gain_loss_files/figure-gfm/unnamed-chunk-4-3.png)<!-- -->
 
 ``` r
 Bth_cutoff = mean(Bth_pw$tree_dist)+sd_from_mean*sd(Bth_pw$tree_dist)
@@ -262,7 +284,7 @@ Bth_PIC = get_phylo_independent_comps('Bacteroides_thetaiotaomicron',Bth_cutoff)
 
     ## [1] "Bacteroides_thetaiotaomicron" "0.00816877504324712"
 
-![](gene_gain_loss_files/figure-gfm/unnamed-chunk-3-4.png)<!-- -->
+![](gene_gain_loss_files/figure-gfm/unnamed-chunk-4-4.png)<!-- -->
 
 ``` r
 source('scripts/pangenome_analyses/gene_gain_loss_functions.R')

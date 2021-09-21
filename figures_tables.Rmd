@@ -10,6 +10,7 @@ rm(list=ls())
 knitr::opts_chunk$set(echo = TRUE, message=FALSE, warning=FALSE)
 knitr::opts_knit$set(root.dir ='/stor/work/Ochman/alex/captive_ape_strain_genomes')
 library(ape)
+library(ade4)
 library(treeio)
 library(ggtree)
 library(estimatr)
@@ -145,7 +146,7 @@ annotation = read_tsv(file=annotation_file,
 #merge copy number table and annotation
 copyNumTable_annotation = copyNumTable  %>% #add annotation info to copy number table 
   left_join(select(annotation,Gene,func_group,func_annot,Annotation),by='Gene')
-copyNum_funcGroup = copyNumTable_annotation %>% # group copy numbers by functional group 
+copyNum_funcGroup = copyNumTable_annotation %>% # group copy numbers by functional group since mrca
   group_by(func_group,func_annot,iso1,iso2) %>% 
   summarise(copyChangeMrca_iso1 = sum(copynum_iso1)-sum(mrca),
             copyChangeMrca_iso2 = sum(copynum_iso2)-sum(mrca)) %>% 
@@ -489,6 +490,21 @@ Figure2B = Bt_rep  %>%
   xlab('Normalized phylogenetic distance')
 Figure2C <- get_legend(Figure2B)
 
+#mantel test
+run_mantel <- function(species){
+  treeM_file = paste0("results/pangenome/",species,"/gene_gain_loss/rep50_dist_treeM.txt")
+  brayM_file = paste0("results/pangenome/",species,"/gene_gain_loss/rep50_dist_brayM.txt")
+  treeM = read.table(treeM_file)
+  brayM = read.table(brayM_file)
+  res = mantel.rtest(as.dist(treeM),as.dist(brayM),nrepet = 9999)
+  print(c(species,'r',res$obs,'p',res$pval))
+
+}
+run_mantel('Bacteroides_xylanisolvens')
+run_mantel('Bacteroides_ovatus')
+run_mantel('Bacteroides_fragilis')
+run_mantel('Bacteroides_thetaiotaomicron')
+
 #determine whether closely related strains exhibit greater variance in number of genomes
 #in different Bacteroides species
 Bt_rep = Bt_rep  %>% 
@@ -525,8 +541,8 @@ Bt_rep  %>%
              method = "lm",color='green4', formula = y ~ x, size = 1, se=TRUE) +
   stat_smooth(data = filter(Bt_rep ,taxonomy_Species.iso1 == 'Bacteroides_xylanisolvens'),
               method = "lm",color='blue4', formula = y ~  x, size = 1, se=TRUE)+
-  ylab('Pangenome distance (Bray-Curtis)')+
-  xlab('Differene in # of predicted genes')
+  ylab('Differene in # of predicted genes')+
+  xlab('Normalized phylogenetic distance')
 
 left = Figure2A + 
   theme(axis.title.x= element_blank()) +
@@ -859,7 +875,8 @@ diamond = read_tsv(file.path(diamond_dir,'diamond_blast_taxonomy.txt'))
 gff_diamond = gff %>% 
   left_join(diamond, by = c(Gene.ID = 'GeneID'))%>%
    mutate_all(funs(sjmisc::replace_na(., value = 'no_hit')))
-                         
+   
+                      
 #reclassify infrequent Bacteroides species to Bacteroides other
 other_Bt = c('Bacteroides_caccae','Bacteroides_clarus','Bacteroides_congonensis',
              'Bacteroides_faecis','Bacteroides_finegoldii','Bacteroides_fragilis',
@@ -878,7 +895,6 @@ Phyla = c('Proteobacteria','Bacteriophage','Bacteroidetes','Campylobacterota')
 gff_diamond$group[gff_diamond$group%in%Phyla] <- 'Bacteria'
 
 #count occurrences of gained genes in various phyla
-table(gff_diamond$phylalist)
 count_Phyla <- function(a_phylum) {
   return(length(gff_diamond$phylalist[str_detect(gff_diamond$phylalist,a_phylum)==T]))
 }
@@ -887,7 +903,18 @@ phyla = c('Bacteriophage','Bacteroidetes','Proteobacteria','Campylobacterota',
           'Firmicutes','Actinobacteria','no_hit')
 phyla_counts = lapply(phyla,count_Phyla)
 names(phyla_counts) <- phyla
-print(phyla_counts)
+print(as.data.frame(phyla_counts))
+
+#count occurrences of gained genes in various genera
+
+count_Genera <- function(a_genus) {
+  return(length(gff_diamond$genuslist[str_detect(gff_diamond$genuslist,a_genus)==T]))
+}
+
+genera = c('Bacteroides','Prevotella','Parabacteroides','Alistipes','Escherichia','Campylobacter','Butyricimonas')
+genera_counts = lapply(genera,count_Genera)
+names(genera_counts) <- genera
+print(as.data.frame(genera_counts))
 
 #sum genes by category
 gff_diamond_grouped = gff_diamond %>% 
@@ -930,7 +957,8 @@ gorilla2_HGGs = unique(gorilla2_gains$Gene)
 
 HGGs_gained = as.data.frame(table(c(mixedhost_HGGs,gorilla1_HGGs,gorilla2_HGGs)))
 colnames(HGGs_gained) <- c('HGG','count') 
-HGGs_gained_2lineages = HGGs_gained %>% filter(count>=2)
+#present in more than 2 captive ape lineages
+HGGs_gained_2lineages = HGGs_gained %>% filter(count>=2) 
 
 #gene table
 pres_abs <- read_csv(file.path(dir,'roary_nosplitparalogs/gene_presence_absence.csv'),col_types = cols())
@@ -952,7 +980,7 @@ captive_clade_table <- gene_table %>%
   group_by(Gene,captive_clade) %>%
   tally() %>%
   pivot_wider(names_from=captive_clade,values_from=n,values_fill=0) %>%
-  filter(unassigned<3)
+  filter(unassigned<3) #present in less than 3 other hosts
 
 HGG_table <- gene_table %>% 
   filter(Gene %in% HGGs_gained_2lineages$HGG) %>%
@@ -1018,7 +1046,7 @@ print(length(non_copies))
 #
 TableS5 <- captive_reps_178 %>% 
   filter(Gene %in% non_copies) 
-write_tsv(TableS5,file.path(outdir,'TableS5.txt'))
+write_tsv(TableS5,file.path(outdir,'TableS5_PUL_potential_source.txt'))
 TableS5$specieslist[str_detect(TableS5$specieslist,'xylan')]
 ```
 
@@ -1039,7 +1067,7 @@ sulfatase_genes <- annotation %>%
 
 
 all_prot file not uploaded to github showing how sulftase.faa was generated
-```{r eval = FALSE}
+```{r}
 ##cat all faa files to all_prot.faa  
 #all_prot_file = file.path(dir,'all_prot.faa') 
 #all_prot = readAAStringSet(all_prot_file)
@@ -1092,7 +1120,7 @@ pres = pres %>% select(!contains('total'))
 pres = pres[rowSums(is.na(pres)) != ncol(pres), ]
 #total number of sulfatase groups
 nrow(pres)
-#total number of sulfatase groups
+#total number of core sulfatase groups
 core = pres[rowSums(!is.na(pres)) == ncol(pres), ]
 nrow(core)
 #captive only number of sulfatase groups
@@ -1101,18 +1129,19 @@ captive_only %>% group_by_all() %>% tally() %>% as.data.frame()
 #human only number of sulfatase groups
 human_only = pres %>% filter(is.na(mixedhost_cladeA),is.na(gorilla1_cladeA),is.na(gorilla2_cladeB))
 human_only %>% group_by_all() %>% tally()  %>% as.data.frame() 
+#human_cladeC number of sulfatase groups
+pres %>% filter(!is.na(human_cladeC)) %>% nrow()
+#human_cladeA number of sulfatase groups
+pres %>% filter(!is.na(human_cladeA)) %>% nrow()
 #mixedhost_cladeA number of sulfatase groups
 pres %>% filter(!is.na(mixedhost_cladeA)) %>% nrow()
 #gorilla1_cladeA number of sulfatase groups
 pres %>% filter(!is.na(gorilla1_cladeA)) %>% nrow()
 #gorilla2_cladeB number of sulfatase groups
 pres %>% filter(!is.na(gorilla2_cladeB)) %>% nrow()
-#human_cladeA number of sulfatase groups
-pres %>% filter(!is.na(human_cladeA)) %>% nrow()
 #human_cladeB number of sulfatase groups
 pres %>% filter(!is.na(human_cladeB)) %>% nrow()
-#human_cladeC number of sulfatase groups
-pres %>% filter(!is.na(human_cladeC)) %>% nrow()
+
 
 sulfadata  <- pres %>%
   rownames_to_column(var='Gene')%>%
@@ -1220,7 +1249,7 @@ p <- gheatmap(sulfa_tree_gg_v3,pres,colnames_angle=90,hjust=1,width=.4)  +
 p <- p + new_scale_fill()
 (p2 <- gheatmap(p,func,colnames_angle=90,hjust=1,offset=1,width=.05) +
     scale_fill_manual(values = brewer.pal(15, "Paired")))
-ggsave(p2,file=file.path(outdir,'Figure5_sulfatase_circle.pdf'),height=6,width=6)
+ggsave(p2,file=file.path(outdir,'Figure6_sulfatase_circle.pdf'),height=6,width=6)
 ```
 ```{r}
 sessionInfo(package = NULL)

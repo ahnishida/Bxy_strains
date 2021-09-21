@@ -22,6 +22,7 @@ library(ggtree)
 library(tidyverse)
 library(harrietr)
 library(vegan)
+library(ade4)
 ```
 
 ### Run count
@@ -82,9 +83,14 @@ runCount <- function(species,gain_penalty) {
   
 }
 ```
-```{r eval=F}
+### Compare gain penalty of 1 vs 2 
+```{r,warning=FALSE}
 runCount('Bacteroides_xylanisolvens', 1)
 runCount('Bacteroides_xylanisolvens', 2)
+```
+
+### Run count on other Bt species with gp 2
+```{r eval=F}
 runCount('Bacteroides_ovatus', 2)
 runCount('Bacteroides_fragilis', 2)
 runCount('Bacteroides_thetaiotaomicron', 2)
@@ -124,9 +130,12 @@ identify_pw_50strain = function(species) {
   rep50 <- df$isolate
   
   #phylogenetic distance
-  tree_dist <- cophenetic.phylo(tree)[rep50,rep50]
-  tree_dist = melt_dist(tree_dist) %>%
+  tree_distM<- cophenetic.phylo(tree)[rep50,rep50]
+  tree_dist = melt_dist(tree_distM) %>%
     dplyr::rename(tree_dist=dist) 
+  tree_distM_file = file.path(dir,'gene_gain_loss/rep50_dist_treeM.txt')
+  print(tree_distM_file)
+  write.table(tree_distM,file = tree_distM_file,quote=F,sep='\t')
   
   #gene content distance
   isblank <- function(x) {as.numeric(str_count(x, pattern = "_"))}
@@ -136,9 +145,13 @@ identify_pw_50strain = function(species) {
       column_to_rownames(var = 'Gene') %>% 
       as.matrix()
   gene_table[is.na(gene_table)] <- 0
-  dist_bray <- as.matrix(vegdist(t(gene_table), method="bray",full=T))
-  dist_bray = dist_bray[rep50,rep50]
-  dist_bray = melt_dist(dist_bray) %>%
+  dist_brayM <- as.matrix(vegdist(t(gene_table), method="bray",full=T))
+  dist_brayM = dist_brayM[rep50,rep50]
+  dist_brayM_file = file.path(dir,'gene_gain_loss/rep50_dist_brayM.txt')
+  print(dist_brayM_file)
+  write.table(dist_brayM,file = dist_brayM_file,quote=F,sep='\t')
+  mantel.test(tree_distM,dist_brayM)
+  dist_bray = melt_dist(dist_brayM) %>%
       dplyr::rename(bray_curtis=dist) 
   pw_df = tree_dist %>% 
     left_join(dist_bray,by=c('iso2','iso1')) 
@@ -235,7 +248,7 @@ get_phylo_independent_comps = function(species,cutoff,outfile) {
 Bxy_cutoff = .008
 Bxy_PIC = get_phylo_independent_comps('Bacteroides_xylanisolvens',Bxy_cutoff)
 sd_from_mean = (Bxy_cutoff - mean(Bxy_pw$tree_dist))/sd(Bxy_pw$tree_dist)
-
+print(sd_from_mean)
 #apply cutoff same sd below mean for other Bt species
 Bov_cutoff = mean(Bov_pw$tree_dist)+sd_from_mean*sd(Bov_pw$tree_dist)
 Bov_PIC = get_phylo_independent_comps('Bacteroides_ovatus',Bov_cutoff)

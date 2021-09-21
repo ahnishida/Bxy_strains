@@ -6,7 +6,7 @@ export PATH=$PATH:bin/GapFiller_v1-11_linux-x86_64
 #run all processing scripts to generate final assembly from raw fastq
 
 source activate spades-env
-input="metadata/isolates_names_head.txt"
+input="metadata/isolates_names.txt"
 while IFS= read -r isolate
 do
   echo $isolate
