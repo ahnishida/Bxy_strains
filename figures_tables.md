@@ -613,7 +613,7 @@ run_mantel('Bacteroides_fragilis')
 ```
 
     ## [1] "Bacteroides_fragilis" "r"                    "0.331589252737358"   
-    ## [4] "p"                    "1e-04"
+    ## [4] "p"                    "3e-04"
 
 ``` r
 run_mantel('Bacteroides_thetaiotaomicron')

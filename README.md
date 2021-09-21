@@ -27,6 +27,6 @@ This manuscript has been submitted
 
 
 ##### 3. Apply gene-gain-loss methodology to your data
-[Explore functions using test data provided](https://github.com/ahnishida/Bxy_strains/blob/main/scripts/pangenome_analyses/gene_gain_loss_functions.R)
+[Explore gene_gain_loss functions using test data provided](https://github.com/ahnishida/Bxy_strains/blob/main/scripts/pangenome_analyses/gene_gain_loss_functions.R)
 
 
