@@ -11,7 +11,6 @@ This manuscript has been submitted
 
 ##### 1. Reproduce results 
 [generate all figures and tables using processed results provided in this repository](https://github.com/ahnishida/Bxy_strains/blob/main/figures_tables.md)
--Clone this repository, open figures_tables.Rmd, set rootdir ~/PATH_to_here/Bxy_strains, run_all
 
 ##### 2. Explore generation of processed results
 [genome assembly and QC of strains sequenced by this study](https://github.com/ahnishida/Bxy_strains/tree/main/scripts/isolate_genome_assembly)
