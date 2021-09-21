@@ -1,0 +1,65 @@
+func_group	func_annot	gorilla1_P21.11A	mixedhost_P14.E4	gorilla2_P21.6E	total
+COG3119@2|Bacteria_NA_NA	N-acetylgalactosamine-6-O-sulfatase,Endo-4-O-sulfatase,Delta 4,5-hexuronate-2-O-sulfatase,Alkaline phosphatase PafA,hypothetical protein,N-acetylglucosamine-6-O-sulfatase,Arylsulfatase,Ulvan-active sulfatase,Bifunctional sulfatase/alpha-L-rhamnosidase,Choline-sulfatase	9	24	8	41
+COG3250@2|Bacteria_K01190_GH2	Beta-galactosidase,Evolved beta-galactosidase subunit alpha,Beta-galactosidase BoGH2A,Putative beta-glucuronidase	5	13	4	22
+COG0438@2|Bacteria_NA_GT4	Alpha-D-kanosaminyltransferase,D-inositol-3-phosphate glycosyltransferase,Putative teichuronic acid biosynthesis glycosyltransferase TuaC,N,N'-diacetylbacillosaminyl-diphospho-undecaprenol alpha-1,3-N-acetylgalactosaminyltransferase,GDP-mannose-dependent alpha-(1-6)-phosphatidylinositol monomannoside mannosyltransferase,Glycogen synthase,O-antigen biosynthesis glycosyltransferase WbnH,hypothetical protein,UDP-N-acetylglucosamine--peptide N-acetylglucosaminyltransferase GtfA subunit,Putative glycosyltransferase EpsF,Alpha-maltose-1-phosphate synthase,N-acetylgalactosamine-N,N'-diacetylbacillosaminyl-diphospho-undecaprenol 4-alpha-N-acetylgalactosaminyltransferase,GalNAc-alpha-(1->4)-GalNAc-alpha-(1->3)-diNAcBac-PP-undecaprenol alpha-1,4-N-acetyl-D-galactosaminyltransferase,N-acetyl-alpha-D-glucosaminyl L-malate synthase,Putative glycosyltransferase EpsD,Spore coat protein SA,D-inositol 3-phosphate glycosyltransferase,Alpha-monoglucosyldiacylglycerol synthase,GDP-mannose-dependent alpha-mannosyltransferase	4	11	2	17
+COG0582@2|Bacteria_NA_NA	hypothetical protein,Tyrosine recombinase XerC,Tyrosine recombinase XerD	2	9	4	15
+2ZA7H@2|Bacteria_NA_NA	hypothetical protein	4	7	2	13
+COG1435@2|Bacteria_K21572_NA	hypothetical protein,SusD-like protein P25,SusD-like protein P2,SusD-like protein,SusD-like protein P38	1	7	5	13
+COG4206@2|Bacteria_K21573_NA	TonB-dependent receptor SusC,TonB-dependent receptor P39,TonB-dependent receptor P3,TonB-dependent receptor P26	4	5	4	13
+COG2452@2|Bacteria_NA_NA	hypothetical protein	4	4	1	9
+COG3119@2|Bacteria_K01565_NA	Ulvan-active sulfatase	3	3	3	9
+COG4974@2|Bacteria_NA_NA	Tyrosine recombinase XerC,hypothetical protein,Tyrosine recombinase XerD,IS66 family transposase ISBthe6	2	3	3	8
+2Z8RA@2|Bacteria_NA_NA	hypothetical protein	3	3	1	7
+COG0438@2|Bacteria_NA_NA	hypothetical protein,Beta-1,6-galactofuranosyltransferase WbbI,D-inositol-3-phosphate glycosyltransferase,Capsular polysaccharide phosphotransferase SacB	4	2	1	7
+COG1053@2|Bacteria_NA_NA	hypothetical protein	2	3	2	7
+COG1595@2|Bacteria_NA_NA	hypothetical protein,ECF RNA polymerase sigma factor RpoE,ECF RNA polymerase sigma factor SigE,ECF RNA polymerase sigma-E factor	2	2	3	7
+COG1629@2|Bacteria_NA_NA	TonB-dependent receptor SusC,TonB-dependent receptor P3,hypothetical protein,TonB-dependent receptor P26,TonB-dependent receptor P39,tRNA-Val(gac),Vitamin B12 transporter BtuB	1	4	2	7
+COG5434@2|Bacteria_NA_GH110	Alpha-1,3-galactosidase B,hypothetical protein	2	2	3	7
+COG0561@2|Bacteria_K21572_NA	SusD-like protein P38,hypothetical protein,SusD-like protein P25,SusD-like protein	2	3	1	6
+COG2186@2|Bacteria_K05799_NA	HTH-type transcriptional regulator LutR,Glc operon transcriptional activator	2	2	2	6
+COG3250@2|Bacteria_NA_NA	hypothetical protein,Beta-galactosidase,Beta-galactosidase BoGH2A	1	4	1	6
+COG3507@2|Bacteria_NA_GH43	hypothetical protein,Xylosidase/arabinosidase	1	2	3	6
+2Z7ID@2|Bacteria_K02856_NA	L-rhamnose-proton symporter	1	3	1	5
+33PQM@2|Bacteria_NA_GH150	Lambda-carrageenase	2	2	1	5
+COG0110@2|Bacteria_NA_NA	2,3,4,5-tetrahydropyridine-2,6-dicarboxylate N-acetyltransferase,hypothetical protein,Bifunctional protein GlmU,Putative acetyltransferase,Virginiamycin A acetyltransferase,Putative acetyltransferase EpsM,Maltose O-acetyltransferase,UDP-N-acetylbacillosamine N-acetyltransferase,Galactoside O-acetyltransferase	1	2	2	5
+COG0446@2|Bacteria_K21572_NA	SusD-like protein P2,hypothetical protein,SusD-like protein P38,SusD-like protein,SusD-like protein P25,Starch-binding protein SusD	1	3	1	5
+COG1216@2|Bacteria_NA_GT2	Chondroitin synthase,hypothetical protein,PGL/p-HBAD biosynthesis glycosyltransferase,Undecaprenyl-phosphate 4-deoxy-4-formamido-L-arabinose transferase,Putative glycosyltransferase EpsH,putative glycosyltransferase EpsJ	2	2	1	5
+COG1595@2|Bacteria_K03088_NA	hypothetical protein,RNA polymerase sigma-H factor,ECF RNA polymerase sigma factor EcfG,ECF RNA polymerase sigma factor SigL,ECF RNA polymerase sigma factor SigW,RNA polymerase sigma factor FliA,ECF RNA polymerase sigma factor SigR,RNA polymerase sigma factor YlaC,putative RNA polymerase sigma factor FecI,ECF RNA polymerase sigma factor SigK,ECF RNA polymerase sigma-E factor,RNA polymerase sigma factor CnrH,ECF RNA polymerase sigma factor RpoE,ECF RNA polymerase sigma factor SigH,ECF RNA polymerase sigma factor SigE	1	3	1	5
+COG3712@2|Bacteria_K07165_NA	hypothetical protein	1	3	1	5
+COG5434@2|Bacteria_NA_GH82	hypothetical protein,Iota-carrageenase	2	2	1	5
+COG5492@2|Bacteria_NA_NA	hypothetical protein	1	3	1	5
+34636@2|Bacteria_NA_NA	hypothetical protein	1	1	2	4
+COG0236@2|Bacteria_NA_NA	Acyl carrier protein,hypothetical protein,D-alanyl carrier protein	1	1	2	4
+COG0457@2|Bacteria / COG4995@2|Bacteria_NA_NA	hypothetical protein	1	2	1	4
+COG0464@2|Bacteria_NA_NA	hypothetical protein,ATP-dependent zinc metalloprotease FtsH	1	1	2	4
+COG0474@2|Bacteria_NA_NA	Calcium-transporting ATPase 1,Potassium-transporting ATPase ATP-binding subunit,Calcium-transporting ATPase,hypothetical protein	1	2	1	4
+COG0614@2|Bacteria_K21572_NA	SusD-like protein P2,hypothetical protein,SusD-like protein P25	1	2	1	4
+COG1621@2|Bacteria / COG3291@2|Bacteria_NA_NA	hypothetical protein	1	1	2	4
+COG1649@2|Bacteria_K05970_NA	hypothetical protein	2	1	1	4
+COG2273@2|Bacteria_NA_GH16	Beta-glucanase,hypothetical protein,Beta-agarase C,Kappa-carrageenase,Keratan-sulfate endo-1,4-beta-galactosidase	1	2	1	4
+COG3385@2|Bacteria_K07495_NA	hypothetical protein,IS4 family transposase ISCARN70,IS4 family transposase ISCARN93,IS4 family transposase IS4,IS4 family transposase IS943	1	2	1	4
+COG3385@2|Bacteria_NA_NA	IS1380 family transposase ISBfi1,IS4 family transposase ISDra7,hypothetical protein,IS4 family transposase ISBf13,IS4 family transposase IS943,IS1380 family transposase ISBvu1,IS4 family transposase ISBf8,IS1380 family transposase IS942	1	1	2	4
+COG4225@2|Bacteria_K15532_GH105	Unsaturated 3S-rhamnoglycuronyl hydrolase,Unsaturated rhamnogalacturonyl hydrolase YteR,hypothetical protein	1	1	2	4
+COG4249@2|Bacteria_K22684_NA	hypothetical protein	1	2	1	4
+COG5545@2|Bacteria_NA_NA	hypothetical protein	1	2	1	4
+2ZIR1@2|Bacteria_NA_NA	hypothetical protein	1	1	1	3
+2ZQRJ@2|Bacteria_NA_NA	hypothetical protein	1	1	1	3
+32SDB@2|Bacteria_NA_NA	hypothetical protein	1	1	1	3
+COG0394@2|Bacteria_NA_NA	Putative low molecular weight protein-tyrosine-phosphatase,hypothetical protein,Protein-arginine-phosphatase	1	1	1	3
+COG0631@2|Bacteria_K20074_NA	Protein phosphatase PrpC,hypothetical protein	1	1	1	3
+COG1012@2|Bacteria_NA_NA	Succinate-semialdehyde dehydrogenase [NADP(+)] GabD,hypothetical protein	1	1	1	3
+COG1267@2|Bacteria_K01095_NA	Phosphatidylglycerophosphatase A	1	1	1	3
+COG1826@2|Bacteria_K03116_NA	Sec-independent protein translocase protein TatA	1	1	1	3
+COG1853@2|Bacteria_NA_NA	hypothetical protein,Flavoredoxin	1	1	1	3
+COG1874@2|Bacteria_NA_GH167	hypothetical protein	1	1	1	3
+COG1913@2|Bacteria_K06974_NA	hypothetical protein	1	1	1	3
+COG2856@2|Bacteria / COG3093@2|Bacteria_K18831_NA	hypothetical protein	1	1	1	3
+COG3150@2|Bacteria_K07000_NA	hypothetical protein	1	1	1	3
+COG3292@2|Bacteria / COG3437@2|Bacteria / COG5002@2|Bacteria_NA_NA	Sensor histidine kinase RcsC	1	1	1	3
+COG3533@2|Bacteria_K09955_GH127	hypothetical protein,Non-reducing end beta-L-arabinofuranosidase	1	1	1	3
+COG3757@2|Bacteria_K07273_GH25	hypothetical protein	1	1	1	3
+COG3836@2|Bacteria_K02510_NA	2-keto-3-deoxy-L-rhamnonate aldolase	1	1	1	3
+COG4289@2|Bacteria_NA_GH154	hypothetical protein	1	1	1	3
+COG4948@2|Bacteria_K18983_NA	D-galactarolactone cycloisomerase	1	1	1	3
+COG5377@2|Bacteria_NA_NA	hypothetical protein	1	1	1	3
+NA_NA_GH167	hypothetical protein	1	1	1	3
